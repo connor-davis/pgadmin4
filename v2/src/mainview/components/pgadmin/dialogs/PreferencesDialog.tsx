@@ -1,5 +1,6 @@
-import { useTheme } from 'next-themes';
 import { useState } from 'react';
+
+import { useTheme } from 'next-themes';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -78,7 +79,10 @@ function CssVarEditor() {
       </p>
       <div className="grid gap-2">
         {Object.entries(THEME_VAR_LABELS).map(([key, label]) => (
-          <div key={key} className="grid grid-cols-[1fr_2fr] items-center gap-3">
+          <div
+            key={key}
+            className="grid grid-cols-[1fr_2fr] items-center gap-3"
+          >
             <Label htmlFor={`css-var-${key}`} className="text-xs">
               {label}
             </Label>
@@ -107,7 +111,10 @@ function CssVarEditor() {
 
 // ─── Main dialog ───────────────────────────────────────────────────────────────
 
-export function PreferencesDialog({ open, onOpenChange }: PreferencesDialogProps) {
+export function PreferencesDialog({
+  open,
+  onOpenChange,
+}: PreferencesDialogProps) {
   const [activeTab, setActiveTab] = useState('appearance');
 
   return (

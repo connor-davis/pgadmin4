@@ -11,13 +11,16 @@ import type {
   ConnectionStatus,
   ConstraintInfo,
   DbInfo,
+  ERDData,
+  ERDRelationship,
+  ERDTable,
   IndexInfo,
-  PgAdminRPCSchema,
   QueryResult,
   RLSPolicyInfo,
   RuleInfo,
   SchemaInfo,
   ServerConfig,
+  TableDataResult,
   TableInfo,
   TriggerInfo,
 } from './rpc-schema';
@@ -59,6 +62,47 @@ type ServerRow = {
   database: string;
   ssl: number;
 };
+
+type AddServerParams = Omit<ServerConfig, 'id'>;
+type UpdateServerParams = ServerConfig;
+type ServerIdParams = { id: string };
+type ServerDatabaseParams = { serverId: string; database: string };
+type ServerDatabaseSchemaParams = ServerDatabaseParams & { schema: string };
+type ServerDatabaseSchemaTableParams = ServerDatabaseParams & {
+  schema: string;
+  table: string;
+};
+type ExecuteQueryParams = ServerDatabaseParams & { query: string };
+type CreateDatabaseParams = { serverId: string; name: string; owner?: string };
+type DropDatabaseParams = { serverId: string; name: string };
+type CreateSchemaParams = ServerDatabaseParams & {
+  name: string;
+  owner?: string;
+};
+type DropSchemaParams = ServerDatabaseParams & {
+  name: string;
+  cascade?: boolean;
+};
+type CreateTableParams = ServerDatabaseParams & {
+  schema: string;
+  name: string;
+  columns: ColumnDef[];
+};
+type DropTableParams = ServerDatabaseParams & {
+  schema: string;
+  name: string;
+  cascade?: boolean;
+};
+type GetTableDataParams = ServerDatabaseSchemaTableParams & {
+  rowMode?: 'first' | 'last' | 'filtered';
+  page?: number;
+  pageSize?: number;
+  filter?: string;
+};
+type TruncateTableParams = ServerDatabaseSchemaTableParams & {
+  mode?: 'normal' | 'cascade' | 'restart' | 'cascade_restart';
+};
+type AddColumnParams = ServerDatabaseSchemaTableParams & { column: ColumnDef };
 
 function rowToConfig(row: ServerRow): ServerConfig {
   return { ...row, ssl: Boolean(row.ssl) };
@@ -119,7 +163,7 @@ let mainWindow: BrowserWindow | null = null;
 
 // ─── RPC handlers ─────────────────────────────────────────────────────────────
 
-const rpc = BrowserView.defineRPC<PgAdminRPCSchema>({
+const rpc = BrowserView.defineRPC({
   handlers: {
     requests: {
       listServers: (): ServerConfig[] => {
@@ -129,7 +173,7 @@ const rpc = BrowserView.defineRPC<PgAdminRPCSchema>({
         return rows.map(rowToConfig);
       },
 
-      addServer: (params): ServerConfig => {
+      addServer: (params: AddServerParams): ServerConfig => {
         const id = crypto.randomUUID();
         db.prepare(
           `
@@ -149,7 +193,9 @@ const rpc = BrowserView.defineRPC<PgAdminRPCSchema>({
         return rowToConfig(getServerRow(id));
       },
 
-      updateServer: async (params): Promise<ServerConfig> => {
+      updateServer: async (
+        params: UpdateServerParams
+      ): Promise<ServerConfig> => {
         await closeServerConnections(params!.id);
         db.prepare(
           `
@@ -169,13 +215,17 @@ const rpc = BrowserView.defineRPC<PgAdminRPCSchema>({
         return rowToConfig(getServerRow(params!.id));
       },
 
-      deleteServer: async (params): Promise<{ success: boolean }> => {
+      deleteServer: async (
+        params: ServerIdParams
+      ): Promise<{ success: boolean }> => {
         await closeServerConnections(params!.id);
         db.prepare('DELETE FROM servers WHERE id = ?').run(params!.id);
         return { success: true };
       },
 
-      testConnection: async (params): Promise<ConnectionStatus> => {
+      testConnection: async (
+        params: ServerIdParams
+      ): Promise<ConnectionStatus> => {
         const server = getServerRow(params!.id);
         const sql = new SQL({
           hostname: server.host,
@@ -203,7 +253,7 @@ const rpc = BrowserView.defineRPC<PgAdminRPCSchema>({
         }
       },
 
-      getDatabases: async (params): Promise<DbInfo[]> => {
+      getDatabases: async (params: { serverId: string }): Promise<DbInfo[]> => {
         const conn = await getConnection(params!.serverId, 'postgres');
         const rows = await conn<DbInfo[]>`
           SELECT datname AS name,
@@ -215,7 +265,9 @@ const rpc = BrowserView.defineRPC<PgAdminRPCSchema>({
         return rows;
       },
 
-      getSchemas: async (params): Promise<SchemaInfo[]> => {
+      getSchemas: async (
+        params: ServerDatabaseParams
+      ): Promise<SchemaInfo[]> => {
         const conn = await getConnection(params!.serverId, params!.database);
         const rows = await conn<SchemaInfo[]>`
           SELECT nspname AS name,
@@ -228,7 +280,9 @@ const rpc = BrowserView.defineRPC<PgAdminRPCSchema>({
         return rows;
       },
 
-      getTables: async (params): Promise<TableInfo[]> => {
+      getTables: async (
+        params: ServerDatabaseSchemaParams
+      ): Promise<TableInfo[]> => {
         const conn = await getConnection(params!.serverId, params!.database);
         const rows = await conn<TableInfo[]>`
           SELECT tablename AS name,
@@ -247,27 +301,38 @@ const rpc = BrowserView.defineRPC<PgAdminRPCSchema>({
         return rows;
       },
 
-      getColumns: async (params): Promise<ColumnInfo[]> => {
+      getColumns: async (
+        params: ServerDatabaseSchemaTableParams
+      ): Promise<ColumnInfo[]> => {
         const conn = await getConnection(params!.serverId, params!.database);
         const rows = await conn<
-          { name: string; type: string; is_nullable: string }[]
+          {
+            column_default: string | null;
+            is_nullable: string;
+            name: string;
+            type: string;
+          }[]
         >`
           SELECT column_name AS name,
                  data_type   AS type,
-                 is_nullable
+                 is_nullable,
+                 column_default
           FROM   information_schema.columns
           WHERE  table_schema = ${params!.schema}
             AND  table_name   = ${params!.table}
           ORDER  BY ordinal_position
         `;
         return rows.map((r) => ({
+          defaultValue: r.column_default,
           name: r.name,
           type: r.type,
           nullable: r.is_nullable === 'YES',
         }));
       },
 
-      executeQuery: async (params): Promise<QueryResult> => {
+      executeQuery: async (
+        params: ExecuteQueryParams
+      ): Promise<QueryResult> => {
         const conn = await getConnection(params!.serverId, params!.database);
         const result = await conn.unsafe<Record<string, unknown>[]>(
           params!.query
@@ -287,7 +352,7 @@ const rpc = BrowserView.defineRPC<PgAdminRPCSchema>({
         return { columns, rows, rowCount: rows.length };
       },
 
-      createDatabase: async (params): Promise<DbInfo> => {
+      createDatabase: async (params: CreateDatabaseParams): Promise<DbInfo> => {
         // Must connect to an existing db (postgres), not the one we're creating
         const conn = await getConnection(params!.serverId, 'postgres');
         const name = params!.name;
@@ -306,7 +371,9 @@ const rpc = BrowserView.defineRPC<PgAdminRPCSchema>({
         return rows[0];
       },
 
-      dropDatabase: async (params): Promise<{ success: boolean }> => {
+      dropDatabase: async (
+        params: DropDatabaseParams
+      ): Promise<{ success: boolean }> => {
         const serverId = params!.serverId;
         const name = params!.name;
         // Close any cached connections to that database before dropping
@@ -325,7 +392,7 @@ const rpc = BrowserView.defineRPC<PgAdminRPCSchema>({
         return { success: true };
       },
 
-      createSchema: async (params): Promise<SchemaInfo> => {
+      createSchema: async (params: CreateSchemaParams): Promise<SchemaInfo> => {
         const conn = await getConnection(params!.serverId, params!.database);
         const name = params!.name;
         const owner = params!.owner;
@@ -342,22 +409,24 @@ const rpc = BrowserView.defineRPC<PgAdminRPCSchema>({
         return rows[0];
       },
 
-      dropSchema: async (params): Promise<{ success: boolean }> => {
+      dropSchema: async (
+        params: DropSchemaParams
+      ): Promise<{ success: boolean }> => {
         const conn = await getConnection(params!.serverId, params!.database);
         const cascade = params!.cascade ? ' CASCADE' : ' RESTRICT';
         await conn.unsafe(`DROP SCHEMA IF EXISTS "${params!.name}"${cascade}`);
         return { success: true };
       },
 
-      createTable: async (params): Promise<TableInfo> => {
+      createTable: async (params: CreateTableParams): Promise<TableInfo> => {
         const conn = await getConnection(params!.serverId, params!.database);
         const { schema, name, columns } = params!;
         if (!columns || columns.length === 0) {
           throw new Error('At least one column is required');
         }
         const pkCols = columns
-          .filter((c) => c.primaryKey)
-          .map((c) => `"${c.name}"`);
+          .filter((c: ColumnDef) => c.primaryKey)
+          .map((c: ColumnDef) => `"${c.name}"`);
         const colDefs = columns.map((c: ColumnDef) => {
           let def = `"${c.name}" ${c.type}`;
           if (!c.nullable) def += ' NOT NULL';
@@ -372,7 +441,9 @@ const rpc = BrowserView.defineRPC<PgAdminRPCSchema>({
         return { name, schema, type: 'table' };
       },
 
-      dropTable: async (params): Promise<{ success: boolean }> => {
+      dropTable: async (
+        params: DropTableParams
+      ): Promise<{ success: boolean }> => {
         const conn = await getConnection(params!.serverId, params!.database);
         const cascade = params!.cascade ? ' CASCADE' : ' RESTRICT';
         await conn.unsafe(
@@ -381,27 +452,65 @@ const rpc = BrowserView.defineRPC<PgAdminRPCSchema>({
         return { success: true };
       },
 
-      getTableData: async (params): Promise<QueryResult> => {
+      getTableData: async (
+        params: GetTableDataParams
+      ): Promise<TableDataResult> => {
         const conn = await getConnection(params!.serverId, params!.database);
-        const { schema, table, rowMode = 'first', limit = 100, filter } = params!;
+        const {
+          schema,
+          table,
+          rowMode = 'first',
+          page = 1,
+          pageSize = 100,
+          filter,
+        } = params!;
         const qualified = `"${schema}"."${table}"`;
+        const effectivePageSize = Math.max(1, Math.min(pageSize, 1000));
+        const where =
+          rowMode === 'filtered' && filter && filter.trim()
+            ? ` WHERE ${filter}`
+            : '';
+        const countResult = await conn.unsafe<
+          { total_row_count: number | string }[]
+        >(`SELECT COUNT(*)::int AS total_row_count FROM ${qualified}${where}`);
+        const totalRowCount = Number(countResult[0]?.total_row_count ?? 0);
+        const pageCount =
+          totalRowCount === 0
+            ? 1
+            : Math.ceil(totalRowCount / effectivePageSize);
+        const currentPage = Math.max(1, Math.min(page, pageCount));
+        const offset = (currentPage - 1) * effectivePageSize;
 
         let sql: string;
-        if (rowMode === 'all') {
-          sql = `SELECT * FROM ${qualified}`;
-        } else if (rowMode === 'last') {
-          sql = `SELECT * FROM (SELECT * FROM ${qualified} ORDER BY ctid DESC LIMIT ${limit}) _subq ORDER BY ctid`;
-        } else if (rowMode === 'filtered') {
-          const where = filter && filter.trim() ? ` WHERE ${filter}` : '';
-          sql = `SELECT * FROM ${qualified}${where}`;
+
+        if (rowMode === 'last') {
+          sql = `SELECT *
+                 FROM (
+                   SELECT *
+                   FROM   ${qualified}
+                   ORDER  BY ctid DESC
+                   LIMIT  ${effectivePageSize}
+                   OFFSET ${offset}
+                 ) _subq
+                 ORDER  BY ctid`;
         } else {
-          // first (default)
-          sql = `SELECT * FROM ${qualified} LIMIT ${limit}`;
+          sql = `SELECT *
+                 FROM   ${qualified}${where}
+                 LIMIT  ${effectivePageSize}
+                 OFFSET ${offset}`;
         }
 
         const result = await conn.unsafe<Record<string, unknown>[]>(sql);
         if (!Array.isArray(result) || result.length === 0) {
-          return { columns: [], rows: [], rowCount: 0 };
+          return {
+            columns: [],
+            page: currentPage,
+            pageCount,
+            pageSize: effectivePageSize,
+            rowCount: 0,
+            rows: [],
+            totalRowCount,
+          };
         }
         const columns = Object.keys(result[0]);
         const rows = result.map((row) =>
@@ -412,45 +521,76 @@ const rpc = BrowserView.defineRPC<PgAdminRPCSchema>({
               : (val as string | number | boolean | null);
           })
         );
-        return { columns, rows, rowCount: rows.length };
+        return {
+          columns,
+          page: currentPage,
+          pageCount,
+          pageSize: effectivePageSize,
+          rowCount: rows.length,
+          rows,
+          totalRowCount,
+        };
       },
 
-      truncateTable: async (params): Promise<{ success: boolean }> => {
+      truncateTable: async (
+        params: TruncateTableParams
+      ): Promise<{ success: boolean }> => {
         const conn = await getConnection(params!.serverId, params!.database);
         const { schema, table, mode } = params!;
         const qualified = `"${schema}"."${table}"`;
         let suffix = '';
         if (mode === 'cascade') suffix = ' CASCADE';
         else if (mode === 'restart') suffix = ' RESTART IDENTITY';
-        else if (mode === 'cascade_restart') suffix = ' RESTART IDENTITY CASCADE';
+        else if (mode === 'cascade_restart')
+          suffix = ' RESTART IDENTITY CASCADE';
         await conn.unsafe(`TRUNCATE TABLE ${qualified}${suffix}`);
         return { success: true };
       },
 
-      addColumn: async (params): Promise<ColumnInfo> => {
+      addColumn: async (params: AddColumnParams): Promise<ColumnInfo> => {
         const conn = await getConnection(params!.serverId, params!.database);
         const { schema, table, column } = params!;
         let def = `"${column.name}" ${column.type}`;
         if (!column.nullable) def += ' NOT NULL';
         if (column.defaultValue) def += ` DEFAULT ${column.defaultValue}`;
-        await conn.unsafe(`ALTER TABLE "${schema}"."${table}" ADD COLUMN ${def}`);
+        await conn.unsafe(
+          `ALTER TABLE "${schema}"."${table}" ADD COLUMN ${def}`
+        );
         // Re-query column info to return canonical data
-        const rows = await conn<{ name: string; type: string; is_nullable: string }[]>`
+        const rows = await conn<
+          {
+            column_default: string | null;
+            is_nullable: string;
+            name: string;
+            type: string;
+          }[]
+        >`
           SELECT column_name AS name,
                  data_type   AS type,
-                 is_nullable
+                 is_nullable,
+                 column_default
           FROM   information_schema.columns
           WHERE  table_schema = ${schema}
             AND  table_name   = ${table}
             AND  column_name  = ${column.name}
         `;
-        if (rows.length === 0) throw new Error(`Column "${column.name}" not found after creation`);
-        return { name: rows[0].name, type: rows[0].type, nullable: rows[0].is_nullable === 'YES' };
+        if (rows.length === 0)
+          throw new Error(`Column "${column.name}" not found after creation`);
+        return {
+          defaultValue: rows[0].column_default,
+          name: rows[0].name,
+          type: rows[0].type,
+          nullable: rows[0].is_nullable === 'YES',
+        };
       },
 
-      getConstraints: async (params): Promise<ConstraintInfo[]> => {
+      getConstraints: async (
+        params: ServerDatabaseSchemaTableParams
+      ): Promise<ConstraintInfo[]> => {
         const conn = await getConnection(params!.serverId, params!.database);
-        const rows = await conn<{ name: string; type: string; definition: string }[]>`
+        const rows = await conn<
+          { name: string; type: string; definition: string }[]
+        >`
           SELECT con.conname AS name,
                  con.contype AS type,
                  pg_catalog.pg_get_constraintdef(con.oid, true) AS definition
@@ -464,9 +604,18 @@ const rpc = BrowserView.defineRPC<PgAdminRPCSchema>({
         return rows;
       },
 
-      getIndexes: async (params): Promise<IndexInfo[]> => {
+      getIndexes: async (
+        params: ServerDatabaseSchemaTableParams
+      ): Promise<IndexInfo[]> => {
         const conn = await getConnection(params!.serverId, params!.database);
-        const rows = await conn<{ name: string; definition: string; unique: boolean; primary: boolean }[]>`
+        const rows = await conn<
+          {
+            name: string;
+            definition: string;
+            unique: boolean;
+            primary: boolean;
+          }[]
+        >`
           SELECT i.relname AS name,
                  pg_catalog.pg_get_indexdef(ix.indexrelid, 0, true) AS definition,
                  ix.indisunique AS unique,
@@ -482,15 +631,19 @@ const rpc = BrowserView.defineRPC<PgAdminRPCSchema>({
         return rows;
       },
 
-      getRLSPolicies: async (params): Promise<RLSPolicyInfo[]> => {
+      getRLSPolicies: async (
+        params: ServerDatabaseSchemaTableParams
+      ): Promise<RLSPolicyInfo[]> => {
         const conn = await getConnection(params!.serverId, params!.database);
-        const rows = await conn<{
-          name: string;
-          cmd: string;
-          roles: string;
-          using: string | null;
-          with_check: string | null;
-        }[]>`
+        const rows = await conn<
+          {
+            name: string;
+            cmd: string;
+            roles: string;
+            using: string | null;
+            with_check: string | null;
+          }[]
+        >`
           SELECT polname AS name,
                  CASE polcmd
                    WHEN 'r' THEN 'SELECT'
@@ -523,7 +676,9 @@ const rpc = BrowserView.defineRPC<PgAdminRPCSchema>({
         }));
       },
 
-      getRules: async (params): Promise<RuleInfo[]> => {
+      getRules: async (
+        params: ServerDatabaseSchemaTableParams
+      ): Promise<RuleInfo[]> => {
         const conn = await getConnection(params!.serverId, params!.database);
         const rows = await conn<{ name: string; definition: string }[]>`
           SELECT rulename AS name,
@@ -540,6 +695,121 @@ const rpc = BrowserView.defineRPC<PgAdminRPCSchema>({
           ORDER  BY rulename
         `;
         return rows;
+      },
+
+      getERDData: async (params: ServerDatabaseParams): Promise<ERDData> => {
+        const conn = await getConnection(params!.serverId, params!.database);
+        const tables = await conn<
+          { name: string; schema: string; type: string }[]
+        >`
+          SELECT cls.relname AS name,
+                 ns.nspname AS schema,
+                 CASE cls.relkind
+                   WHEN 'p' THEN 'partitioned table'
+                   ELSE 'table'
+                 END AS type
+          FROM   pg_catalog.pg_class cls
+          JOIN   pg_catalog.pg_namespace ns ON ns.oid = cls.relnamespace
+          WHERE  cls.relkind IN ('r', 'p')
+            AND  ns.nspname NOT IN ('pg_catalog', 'information_schema')
+          ORDER  BY ns.nspname, cls.relname
+        `;
+
+        const columns = await conn<
+          {
+            column_default: string | null;
+            is_nullable: string;
+            name: string;
+            schema: string;
+            table_name: string;
+            type: string;
+          }[]
+        >`
+          SELECT column_name AS name,
+                 column_default,
+                 data_type AS type,
+                 is_nullable,
+                 table_name,
+                 table_schema AS schema
+          FROM   information_schema.columns
+          WHERE  table_schema NOT IN ('pg_catalog', 'information_schema')
+          ORDER  BY table_schema, table_name, ordinal_position
+        `;
+
+        const relationships = await conn<
+          {
+            name: string;
+            source_column: string;
+            source_schema: string;
+            source_table: string;
+            target_column: string;
+            target_schema: string;
+            target_table: string;
+          }[]
+        >`
+          SELECT con.conname AS name,
+                 src_att.attname AS source_column,
+                 src_ns.nspname AS source_schema,
+                 src.relname AS source_table,
+                 tgt_att.attname AS target_column,
+                 tgt_ns.nspname AS target_schema,
+                 tgt.relname AS target_table
+          FROM   pg_catalog.pg_constraint con
+          JOIN   pg_catalog.pg_class src ON src.oid = con.conrelid
+          JOIN   pg_catalog.pg_namespace src_ns ON src_ns.oid = src.relnamespace
+          JOIN   pg_catalog.pg_class tgt ON tgt.oid = con.confrelid
+          JOIN   pg_catalog.pg_namespace tgt_ns ON tgt_ns.oid = tgt.relnamespace
+          JOIN   unnest(con.conkey) WITH ORDINALITY AS src_key(attnum, ordinality)
+                   ON true
+          JOIN   unnest(con.confkey) WITH ORDINALITY AS tgt_key(attnum, ordinality)
+                   ON tgt_key.ordinality = src_key.ordinality
+          JOIN   pg_catalog.pg_attribute src_att
+                   ON src_att.attrelid = src.oid
+                  AND src_att.attnum = src_key.attnum
+          JOIN   pg_catalog.pg_attribute tgt_att
+                   ON tgt_att.attrelid = tgt.oid
+                  AND tgt_att.attnum = tgt_key.attnum
+          WHERE  con.contype = 'f'
+            AND  src_ns.nspname NOT IN ('pg_catalog', 'information_schema')
+            AND  tgt_ns.nspname NOT IN ('pg_catalog', 'information_schema')
+          ORDER  BY src_ns.nspname, src.relname, con.conname, src_key.ordinality
+        `;
+
+        const columnsByTable = new Map<string, ColumnInfo[]>();
+        for (const column of columns) {
+          const tableKey = `${column.schema}.${column.table_name}`;
+          const tableColumns = columnsByTable.get(tableKey) ?? [];
+          tableColumns.push({
+            defaultValue: column.column_default,
+            name: column.name,
+            type: column.type,
+            nullable: column.is_nullable === 'YES',
+          });
+          columnsByTable.set(tableKey, tableColumns);
+        }
+
+        return {
+          relationships: relationships.map(
+            (relationship): ERDRelationship => ({
+              name: relationship.name,
+              sourceColumn: relationship.source_column,
+              sourceSchema: relationship.source_schema,
+              sourceTable: relationship.source_table,
+              targetColumn: relationship.target_column,
+              targetSchema: relationship.target_schema,
+              targetTable: relationship.target_table,
+            })
+          ),
+          tables: tables.map(
+            (table): ERDTable => ({
+              columns:
+                columnsByTable.get(`${table.schema}.${table.name}`) ?? [],
+              name: table.name,
+              schema: table.schema,
+              type: table.type,
+            })
+          ),
+        };
       },
 
       minimizeWindow: (): void => {
@@ -562,14 +832,18 @@ const rpc = BrowserView.defineRPC<PgAdminRPCSchema>({
         maximized: mainWindow?.isMaximized() ?? false,
       }),
 
-      getTriggers: async (params): Promise<TriggerInfo[]> => {
+      getTriggers: async (
+        params: ServerDatabaseSchemaTableParams
+      ): Promise<TriggerInfo[]> => {
         const conn = await getConnection(params!.serverId, params!.database);
-        const rows = await conn<{
-          name: string;
-          event: string;
-          timing: string;
-          enabled: boolean;
-        }[]>`
+        const rows = await conn<
+          {
+            name: string;
+            event: string;
+            timing: string;
+            enabled: boolean;
+          }[]
+        >`
           SELECT t.tgname AS name,
                  string_agg(
                    CASE em.num
@@ -596,7 +870,7 @@ const rpc = BrowserView.defineRPC<PgAdminRPCSchema>({
         `;
         return rows;
       },
-    },
+    } as Record<string, (params?: unknown) => unknown>,
   },
 });
 

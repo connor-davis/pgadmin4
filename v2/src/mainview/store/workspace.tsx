@@ -7,7 +7,7 @@ import React, {
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
-export type TabType = 'query-tool' | 'welcome';
+export type TabType = 'erd' | 'query-tool' | 'scratch-pad' | 'welcome';
 
 export interface QueryToolTabData {
   type: 'query-tool';
@@ -24,7 +24,23 @@ export interface WelcomeTabData {
   title: string;
 }
 
-export type TabData = QueryToolTabData | WelcomeTabData;
+export interface ScratchPadTabData {
+  type: 'scratch-pad';
+  title: string;
+}
+
+export interface ERDTabData {
+  type: 'erd';
+  serverId: string;
+  database: string;
+  title: string;
+}
+
+export type TabData =
+  | ERDTabData
+  | QueryToolTabData
+  | ScratchPadTabData
+  | WelcomeTabData;
 
 export interface WorkspaceTab {
   id: string;
@@ -49,6 +65,29 @@ function reducer(
 ): WorkspaceState {
   switch (action.type) {
     case 'OPEN_TAB': {
+      if (action.tab.data.type === 'scratch-pad') {
+        const existing = state.tabs.find((t) => t.data.type === 'scratch-pad');
+        if (existing) {
+          return { ...state, activeTabId: existing.id };
+        }
+      }
+
+      if (action.tab.data.type === 'erd') {
+        const newData = action.tab.data as ERDTabData;
+        const existing = state.tabs.find((t) => {
+          if (t.data.type !== 'erd') return false;
+          const existingData = t.data as ERDTabData;
+          return (
+            existingData.serverId === newData.serverId &&
+            existingData.database === newData.database
+          );
+        });
+
+        if (existing) {
+          return { ...state, activeTabId: existing.id };
+        }
+      }
+
       // If a query-tool tab (no initialSql) for same server+db already exists, just activate it
       if (action.tab.data.type === 'query-tool') {
         const newData = action.tab.data as QueryToolTabData;
@@ -94,9 +133,21 @@ function reducer(
 interface WorkspaceContextValue {
   tabs: WorkspaceTab[];
   activeTabId: string | null;
+  openERD: (serverId: string, database: string) => void;
   openQueryTool: (serverId: string, database: string) => void;
-  openViewData: (serverId: string, database: string, schema: string, table: string) => void;
-  openScript: (serverId: string, database: string, title: string, sql: string) => void;
+  openScratchPad: () => void;
+  openViewData: (
+    serverId: string,
+    database: string,
+    schema: string,
+    table: string
+  ) => void;
+  openScript: (
+    serverId: string,
+    database: string,
+    title: string,
+    sql: string
+  ) => void;
   closeTab: (id: string) => void;
   activateTab: (id: string) => void;
 }
@@ -111,13 +162,43 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     activeTabId: null,
   });
 
+  const openERD = useCallback((serverId: string, database: string) => {
+    dispatch({
+      type: 'OPEN_TAB',
+      tab: {
+        id: `erd-${serverId}-${database}`,
+        data: {
+          type: 'erd',
+          serverId,
+          database,
+          title: `${database} ERD`,
+        },
+      },
+    });
+  }, []);
+
   const openQueryTool = useCallback((serverId: string, database: string) => {
     const id = `query-tool-${serverId}-${database}-${Date.now()}`;
     dispatch({
       type: 'OPEN_TAB',
       tab: {
         id,
-        data: { type: 'query-tool', serverId, database, title: database || 'Query Tool' },
+        data: {
+          type: 'query-tool',
+          serverId,
+          database,
+          title: database || 'Query Tool',
+        },
+      },
+    });
+  }, []);
+
+  const openScratchPad = useCallback(() => {
+    dispatch({
+      type: 'OPEN_TAB',
+      tab: {
+        id: 'scratch-pad',
+        data: { type: 'scratch-pad', title: 'Scratch Pad' },
       },
     });
   }, []);
@@ -176,7 +257,9 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       value={{
         tabs: state.tabs,
         activeTabId: state.activeTabId,
+        openERD,
         openQueryTool,
+        openScratchPad,
         openViewData,
         openScript,
         closeTab,

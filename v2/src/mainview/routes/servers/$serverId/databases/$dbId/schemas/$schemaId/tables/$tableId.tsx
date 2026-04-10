@@ -9,7 +9,7 @@ import {
   Scissors,
   Trash2,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { AddColumnDialog } from '@/components/pgadmin/dialogs/AddColumnDialog';
 import { ConfirmDropDialog } from '@/components/pgadmin/dialogs/ConfirmDropDialog';
@@ -23,14 +23,8 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
+import { ResultPagination } from '@/components/pgadmin/ResultPagination';
+import { ResultTable } from '@/components/pgadmin/ResultTable';
 import { queryKeys, rpc } from '@/lib/rpc';
 
 export const Route = createFileRoute(
@@ -69,6 +63,8 @@ function TableDetailPage() {
   const [rowMode, setRowMode] = useState<RowMode>('first');
   const [filterText, setFilterText] = useState('');
   const [appliedFilter, setAppliedFilter] = useState('');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(100);
 
   const { data: columns = [], isLoading: colsLoading } = useQuery({
     queryKey: queryKeys.columns(serverId, dbId, schemaId, tableId),
@@ -80,17 +76,16 @@ function TableDetailPage() {
       ...queryKeys.tableData(serverId, dbId, schemaId, tableId),
       rowMode,
       appliedFilter,
+      page,
+      pageSize,
     ],
     queryFn: () =>
-      rpc.getTableData(
-        serverId,
-        dbId,
-        schemaId,
-        tableId,
-        100,
+      rpc.getTableData(serverId, dbId, schemaId, tableId, {
+        page,
+        pageSize,
         rowMode,
-        rowMode === 'filtered' ? appliedFilter : undefined
-      ),
+        filter: rowMode === 'filtered' ? appliedFilter : undefined,
+      }),
   });
 
   async function handleDrop() {
@@ -116,7 +111,12 @@ function TableDetailPage() {
 
   function applyFilter() {
     setAppliedFilter(filterText);
+    setPage(1);
   }
+
+  useEffect(() => {
+    setPage(1);
+  }, [pageSize, rowMode]);
 
   return (
     <div className="flex flex-col h-full">
@@ -189,7 +189,7 @@ function TableDetailPage() {
 
       <div className="flex flex-col flex-1 overflow-hidden divide-y divide-border">
         {/* Columns panel */}
-        <div className="shrink-0 max-h-48 overflow-y-auto">
+        <div className="shrink-0 max-h-72 overflow-hidden">
           <div className="px-4 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground bg-muted/40 flex items-center justify-between">
             <span>Columns ({columns.length})</span>
             <Button
@@ -207,26 +207,15 @@ function TableDetailPage() {
               <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Nullable</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {columns.map((col) => (
-                  <TableRow key={col.name}>
-                    <TableCell className="font-medium">{col.name}</TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {col.type}
-                    </TableCell>
-                    <TableCell>{col.nullable ? 'YES' : 'NO'}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            <ResultTable
+              columns={['Name', 'Type', 'Nullable', 'Default']}
+              rows={columns.map((col) => [
+                col.name,
+                col.type,
+                col.nullable ? 'YES' : 'NO',
+                col.defaultValue ?? '',
+              ])}
+            />
           )}
         </div>
 
@@ -235,7 +224,7 @@ function TableDetailPage() {
           {/* View data toolbar */}
           <div className="px-4 py-2 bg-muted/40 flex items-center gap-2 flex-wrap shrink-0">
             <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mr-1">
-              View Data{tableData ? ` (${tableData.rowCount} rows)` : ''}
+              View Data{tableData ? ` (${tableData.totalRowCount} rows)` : ''}
             </span>
             {(['first', 'last', 'all', 'filtered'] as RowMode[]).map((mode) => (
               <button
@@ -272,38 +261,27 @@ function TableDetailPage() {
           </div>
 
           {/* Data table */}
-          <div className="flex-1 overflow-auto">
+          <div className="min-h-0 flex-1">
             {dataLoading ? (
               <div className="flex justify-center py-4">
                 <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
               </div>
             ) : tableData && tableData.columns.length > 0 ? (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    {tableData.columns.map((col) => (
-                      <TableHead key={col}>{col}</TableHead>
-                    ))}
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {tableData.rows.map((row, i) => (
-                    <TableRow key={i}>
-                      {row.map((cell, j) => (
-                        <TableCell key={j} className="text-xs font-mono">
-                          {cell === null ? (
-                            <span className="text-muted-foreground italic">
-                              NULL
-                            </span>
-                          ) : (
-                            String(cell)
-                          )}
-                        </TableCell>
-                      ))}
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+              <>
+                <ResultTable
+                  columns={tableData.columns}
+                  rows={tableData.rows}
+                  rowOffset={(tableData.page - 1) * tableData.pageSize}
+                />
+                <ResultPagination
+                  page={tableData.page}
+                  pageCount={tableData.pageCount}
+                  pageSize={tableData.pageSize}
+                  totalRowCount={tableData.totalRowCount}
+                  onPageChange={setPage}
+                  onPageSizeChange={setPageSize}
+                />
+              </>
             ) : (
               <p className="px-4 py-4 text-sm text-muted-foreground">
                 No data in this table.

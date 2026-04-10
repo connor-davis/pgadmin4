@@ -1,12 +1,4 @@
-import {
-  ChevronDown,
-  Download,
-  Eraser,
-  Play,
-  Save,
-  Square,
-  Upload,
-} from 'lucide-react';
+import { Download, Eraser, Play, Save, Square, Upload } from 'lucide-react';
 import { useCallback, useState } from 'react';
 
 import { ResultsPanel } from '@/components/pgadmin/ResultsPanel';
@@ -26,7 +18,11 @@ interface QueryToolTabProps {
   initialSql?: string;
 }
 
-export function QueryToolTab({ serverId, database, initialSql }: QueryToolTabProps) {
+export function QueryToolTab({
+  serverId,
+  database,
+  initialSql,
+}: QueryToolTabProps) {
   const [sql, setSql] = useState(initialSql ?? '');
   const [result, setResult] = useState<QueryResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -105,13 +101,6 @@ export function QueryToolTab({ serverId, database, initialSql }: QueryToolTabPro
           disabled={!result || result.columns.length === 0}
           onClick={() => downloadCsv(result)}
         />
-        {/* Row limit selector */}
-        <div className="ml-auto flex items-center gap-1 text-xs text-muted-foreground">
-          <span>Rows:</span>
-          <button className="flex items-center gap-0.5 rounded border border-border bg-background px-2 py-0.5 text-xs hover:bg-muted">
-            100 <ChevronDown className="h-2.5 w-2.5" />
-          </button>
-        </div>
       </div>
 
       {/* Split: editor + results */}

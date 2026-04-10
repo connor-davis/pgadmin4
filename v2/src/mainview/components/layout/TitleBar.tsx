@@ -2,7 +2,6 @@ import { Maximize2, Minus, Square, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import { PgAdminIcon } from '@/components/icons/PgAdminIcon';
-import { AddServerDialog } from '@/components/pgadmin/dialogs/AddServerDialog';
 import { Kbd, KbdGroup } from '@/components/ui/kbd';
 import {
   Menubar,
@@ -20,12 +19,16 @@ import { useWorkspace } from '@/store/workspace';
 interface TitleBarProps {
   onOpenPreferences?: () => void;
   onAddServer?: () => void;
+  onOpenSearch?: () => void;
 }
 
-export function TitleBar({ onOpenPreferences, onAddServer }: TitleBarProps) {
-  const [addServerOpen, setAddServerOpen] = useState(false);
+export function TitleBar({
+  onOpenPreferences,
+  onAddServer,
+  onOpenSearch,
+}: TitleBarProps) {
   const [isMaximized, setIsMaximized] = useState(false);
-  const { openQueryTool } = useWorkspace();
+  const { openQueryTool, openScratchPad } = useWorkspace();
 
   useEffect(() => {
     rpc.getWindowState().then((state) => {
@@ -65,7 +68,6 @@ export function TitleBar({ onOpenPreferences, onAddServer }: TitleBarProps) {
           label: 'Add Server...',
           onClick: () => {
             onAddServer?.();
-            setAddServerOpen(true);
           },
         },
         { separator: true },
@@ -83,7 +85,16 @@ export function TitleBar({ onOpenPreferences, onAddServer }: TitleBarProps) {
     {
       label: 'Edit',
       items: [
-        { label: 'Search objects...', shortcut: 'Ctrl+F', onClick: () => {} },
+        {
+          label: 'Search objects...',
+          shortcut: 'Ctrl+F',
+          onClick: () => onOpenSearch?.(),
+        },
+        {
+          label: 'Scratch Pad',
+          shortcut: 'Ctrl+Alt+S',
+          onClick: () => openScratchPad(),
+        },
       ],
     },
     {
@@ -119,18 +130,15 @@ export function TitleBar({ onOpenPreferences, onAddServer }: TitleBarProps) {
     },
     {
       label: 'Window',
-      items: [{ label: 'pgAdmin 4', onClick: () => {} }],
-    },
-    {
-      label: 'Help',
       items: [
-        { label: 'Quick Search', shortcut: 'Ctrl+/', disabled: true },
+        { label: 'Minimize', onClick: () => handleMinimize() },
         { separator: true },
-        { label: 'Online Help', disabled: true },
-        { label: 'pgAdmin Website', disabled: true },
-        { label: 'PostgreSQL Website', disabled: true },
+        {
+          label: isMaximized ? 'Restore' : 'Zoom',
+          onClick: () => handleMaximize(),
+        },
         { separator: true },
-        { label: 'About pgAdmin 4', onClick: () => {} },
+        { label: 'Close', shortcut: 'Alt+F4', onClick: () => handleClose() },
       ],
     },
   ];
@@ -226,8 +234,6 @@ export function TitleBar({ onOpenPreferences, onAddServer }: TitleBarProps) {
           </button>
         </div>
       </div>
-
-      <AddServerDialog open={addServerOpen} onOpenChange={setAddServerOpen} />
     </>
   );
 }

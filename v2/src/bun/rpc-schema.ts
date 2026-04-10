@@ -33,6 +33,7 @@ export type ColumnInfo = {
   name: string;
   type: string;
   nullable: boolean;
+  defaultValue: string | null;
 };
 
 /** Column definition used when creating a new table */
@@ -48,6 +49,35 @@ export type QueryResult = {
   columns: string[];
   rows: (string | number | boolean | null)[][];
   rowCount: number;
+};
+
+export type TableDataResult = QueryResult & {
+  page: number;
+  pageCount: number;
+  pageSize: number;
+  totalRowCount: number;
+};
+
+export type ERDTable = {
+  columns: ColumnInfo[];
+  name: string;
+  schema: string;
+  type: string;
+};
+
+export type ERDRelationship = {
+  name: string;
+  sourceColumn: string;
+  sourceSchema: string;
+  sourceTable: string;
+  targetColumn: string;
+  targetSchema: string;
+  targetTable: string;
+};
+
+export type ERDData = {
+  relationships: ERDRelationship[];
+  tables: ERDTable[];
 };
 
 export type ConnectionStatus = {
@@ -97,7 +127,7 @@ export type PgAdminRPCSchema = {
   bun: {
     requests: {
       listServers: { params: undefined; response: ServerConfig[] };
-      addServer: { params: Omit<ServerConfig, "id">; response: ServerConfig };
+      addServer: { params: Omit<ServerConfig, 'id'>; response: ServerConfig };
       updateServer: { params: ServerConfig; response: ServerConfig };
       deleteServer: { params: { id: string }; response: { success: boolean } };
       testConnection: { params: { id: string }; response: ConnectionStatus };
@@ -132,11 +162,21 @@ export type PgAdminRPCSchema = {
         response: { success: boolean };
       };
       createSchema: {
-        params: { serverId: string; database: string; name: string; owner?: string };
+        params: {
+          serverId: string;
+          database: string;
+          name: string;
+          owner?: string;
+        };
         response: SchemaInfo;
       };
       dropSchema: {
-        params: { serverId: string; database: string; name: string; cascade?: boolean };
+        params: {
+          serverId: string;
+          database: string;
+          name: string;
+          cascade?: boolean;
+        };
         response: { success: boolean };
       };
       createTable: {
@@ -150,7 +190,13 @@ export type PgAdminRPCSchema = {
         response: TableInfo;
       };
       dropTable: {
-        params: { serverId: string; database: string; schema: string; name: string; cascade?: boolean };
+        params: {
+          serverId: string;
+          database: string;
+          schema: string;
+          name: string;
+          cascade?: boolean;
+        };
         response: { success: boolean };
       };
       getTableData: {
@@ -159,13 +205,14 @@ export type PgAdminRPCSchema = {
           database: string;
           schema: string;
           table: string;
-          limit?: number;
+          page?: number;
+          pageSize?: number;
           /** "first" (default) | "last" | "all" | "filtered" */
-          rowMode?: "first" | "last" | "all" | "filtered";
+          rowMode?: 'first' | 'last' | 'all' | 'filtered';
           /** WHERE clause body used when rowMode === "filtered" */
           filter?: string;
         };
-        response: QueryResult;
+        response: TableDataResult;
       };
       truncateTable: {
         params: {
@@ -174,7 +221,7 @@ export type PgAdminRPCSchema = {
           schema: string;
           table: string;
           /** "plain" | "cascade" | "restart" | "cascade_restart" */
-          mode: "plain" | "cascade" | "restart" | "cascade_restart";
+          mode: 'plain' | 'cascade' | 'restart' | 'cascade_restart';
         };
         response: { success: boolean };
       };
@@ -189,34 +236,63 @@ export type PgAdminRPCSchema = {
         response: ColumnInfo;
       };
       getConstraints: {
-        params: { serverId: string; database: string; schema: string; table: string };
+        params: {
+          serverId: string;
+          database: string;
+          schema: string;
+          table: string;
+        };
         response: ConstraintInfo[];
       };
       getIndexes: {
-        params: { serverId: string; database: string; schema: string; table: string };
+        params: {
+          serverId: string;
+          database: string;
+          schema: string;
+          table: string;
+        };
         response: IndexInfo[];
       };
       getRLSPolicies: {
-        params: { serverId: string; database: string; schema: string; table: string };
+        params: {
+          serverId: string;
+          database: string;
+          schema: string;
+          table: string;
+        };
         response: RLSPolicyInfo[];
       };
       getRules: {
-        params: { serverId: string; database: string; schema: string; table: string };
+        params: {
+          serverId: string;
+          database: string;
+          schema: string;
+          table: string;
+        };
         response: RuleInfo[];
       };
       getTriggers: {
-        params: { serverId: string; database: string; schema: string; table: string };
+        params: {
+          serverId: string;
+          database: string;
+          schema: string;
+          table: string;
+        };
         response: TriggerInfo[];
+      };
+      getERDData: {
+        params: { serverId: string; database: string };
+        response: ERDData;
       };
       minimizeWindow: { params: undefined; response: void };
       maximizeWindow: { params: undefined; response: void };
       closeWindow: { params: undefined; response: void };
       getWindowState: { params: undefined; response: { maximized: boolean } };
     };
-    messages: {};
+    messages: Record<string, unknown>;
   };
   webview: {
-    requests: {};
-    messages: {};
+    requests: Record<string, unknown>;
+    messages: Record<string, unknown>;
   };
 };

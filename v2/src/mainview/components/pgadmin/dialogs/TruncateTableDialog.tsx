@@ -80,14 +80,21 @@ export function TruncateTableDialog({
         <DialogHeader>
           <DialogTitle>Truncate Table</DialogTitle>
           <DialogDescription>
-            Remove all rows from <strong>{schema}.{table}</strong>. This cannot be undone.
+            Remove all rows from{' '}
+            <strong>
+              {schema}.{table}
+            </strong>
+            . This cannot be undone.
           </DialogDescription>
         </DialogHeader>
 
         {!initialMode && (
           <div className="grid gap-1.5">
             <Label htmlFor="truncate-mode">Mode</Label>
-            <Select value={mode} onValueChange={(v) => setMode(v as TruncateMode)}>
+            <Select
+              value={mode}
+              onValueChange={(v) => setMode(v as TruncateMode)}
+            >
               <SelectTrigger id="truncate-mode" className="w-full">
                 <SelectValue />
               </SelectTrigger>
@@ -106,17 +113,28 @@ export function TruncateTableDialog({
 
         {initialMode && (
           <p className="text-sm text-muted-foreground">
-            Mode: <span className="font-medium text-foreground">{MODE_LABELS[initialMode]}</span>
+            Mode:{' '}
+            <span className="font-medium text-foreground">
+              {MODE_LABELS[initialMode]}
+            </span>
           </p>
         )}
 
         {error && <p className="text-sm text-destructive">{error}</p>}
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
+          <Button
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            disabled={loading}
+          >
             Cancel
           </Button>
-          <Button variant="destructive" onClick={handleConfirm} disabled={loading}>
+          <Button
+            variant="destructive"
+            onClick={handleConfirm}
+            disabled={loading}
+          >
             {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             {MODE_LABELS[effectiveMode]}
           </Button>

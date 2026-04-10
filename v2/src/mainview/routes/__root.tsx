@@ -1,4 +1,5 @@
 import { createRootRoute } from '@tanstack/react-router';
+
 import { Toaster } from 'sonner';
 
 import { AppShell } from '@/components/layout/AppShell';

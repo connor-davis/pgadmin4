@@ -5,6 +5,7 @@ import {
   Database,
   FileCode2,
   Layers,
+  LayoutGrid,
   Loader2,
   Plus,
   RefreshCw,
@@ -17,11 +18,11 @@ import { useState } from 'react';
 
 import { toast } from 'sonner';
 
+import { AddColumnDialog } from '@/components/pgadmin/dialogs/AddColumnDialog';
 import { ConfirmDropDialog } from '@/components/pgadmin/dialogs/ConfirmDropDialog';
 import { CreateDatabaseDialog } from '@/components/pgadmin/dialogs/CreateDatabaseDialog';
 import { CreateSchemaDialog } from '@/components/pgadmin/dialogs/CreateSchemaDialog';
 import { CreateTableDialog } from '@/components/pgadmin/dialogs/CreateTableDialog';
-import { AddColumnDialog } from '@/components/pgadmin/dialogs/AddColumnDialog';
 import { TruncateTableDialog } from '@/components/pgadmin/dialogs/TruncateTableDialog';
 import {
   ContextMenu,
@@ -236,7 +237,7 @@ function DatabaseNode({
   const [createSchemaOpen, setCreateSchemaOpen] = useState(false);
   const [dropOpen, setDropOpen] = useState(false);
   const queryClient = useQueryClient();
-  const { openQueryTool } = useWorkspace();
+  const { openERD, openQueryTool } = useWorkspace();
 
   const { data: schemas = [], isLoading } = useQuery({
     queryKey: queryKeys.schemas(serverId, db.name),
@@ -286,6 +287,10 @@ function DatabaseNode({
           <ContextMenuItem onClick={() => openQueryTool(serverId, db.name)}>
             <Terminal className="h-3.5 w-3.5" />
             Open Query Tool
+          </ContextMenuItem>
+          <ContextMenuItem onClick={() => openERD(serverId, db.name)}>
+            <LayoutGrid className="h-3.5 w-3.5" />
+            Open ERD
           </ContextMenuItem>
           <ContextMenuSeparator />
           <ContextMenuItem onClick={handleRefresh}>
@@ -474,9 +479,20 @@ function buildDeleteScript(schema: string, table: string) {
 
 function buildCreateScript(schema: string, table: string, cols: ColumnInfo[]) {
   const colDefs = cols
-    .map((c) => `  "${c.name}" ${c.type}${c.nullable ? '' : ' NOT NULL'}`)
+    .map(
+      (c) =>
+        `  "${c.name}" ${c.type}${c.nullable ? '' : ' NOT NULL'}${
+          c.defaultValue ? ` DEFAULT ${c.defaultValue}` : ''
+        }`
+    )
     .join(',\n');
   return `CREATE TABLE "${schema}"."${table}" (\n${colDefs}\n);`;
+}
+
+function formatColumnMeta(column: ColumnInfo) {
+  return column.defaultValue
+    ? `${column.type} · ${column.defaultValue}`
+    : column.type;
 }
 
 // ─── TableNode ────────────────────────────────────────────────────────────────
@@ -495,7 +511,9 @@ function TableNode({
   const [open, setOpen] = useState(false);
   const [dropCascade, setDropCascade] = useState(false);
   const [dropOpen, setDropOpen] = useState(false);
-  const [truncateMode, setTruncateMode] = useState<'plain' | 'cascade' | 'restart' | 'cascade_restart'>('plain');
+  const [truncateMode, setTruncateMode] = useState<
+    'plain' | 'cascade' | 'restart' | 'cascade_restart'
+  >('plain');
   const [truncateOpen, setTruncateOpen] = useState(false);
   const queryClient = useQueryClient();
   const { openQueryTool, openScript } = useWorkspace();
@@ -507,7 +525,9 @@ function TableNode({
     });
   }
 
-  function openTruncate(mode: 'plain' | 'cascade' | 'restart' | 'cascade_restart') {
+  function openTruncate(
+    mode: 'plain' | 'cascade' | 'restart' | 'cascade_restart'
+  ) {
     setTruncateMode(mode);
     setTruncateOpen(true);
   }
@@ -529,8 +549,20 @@ function TableNode({
     } else {
       sql = `SELECT *\nFROM ${q}\nLIMIT 100;`;
     }
-    const modeLabel = mode === 'all' ? 'All Rows' : mode === 'last' ? 'Last 100' : mode === 'filtered' ? 'Filtered' : 'First 100';
-    openScript(serverId, database, `${schema}.${table.name} — ${modeLabel}`, sql);
+    const modeLabel =
+      mode === 'all'
+        ? 'All Rows'
+        : mode === 'last'
+          ? 'Last 100'
+          : mode === 'filtered'
+            ? 'Filtered'
+            : 'First 100';
+    openScript(
+      serverId,
+      database,
+      `${schema}.${table.name} — ${modeLabel}`,
+      sql
+    );
   }
 
   async function handleRefresh() {
@@ -666,10 +698,7 @@ function TableNode({
             <Trash2 className="h-3.5 w-3.5" />
             Drop
           </ContextMenuItem>
-          <ContextMenuItem
-            variant="destructive"
-            onClick={() => openDrop(true)}
-          >
+          <ContextMenuItem variant="destructive" onClick={() => openDrop(true)}>
             <Trash2 className="h-3.5 w-3.5" />
             Drop (Cascade)
           </ContextMenuItem>
@@ -853,7 +882,9 @@ function ColumnsNode({
           <NodeRow
             depth={depth}
             icon={
-              <span className="text-[9px] font-bold text-muted-foreground">C</span>
+              <span className="text-[9px] font-bold text-muted-foreground">
+                C
+              </span>
             }
             label="Columns"
             meta={open && !isLoading ? String(columns.length) : undefined}
@@ -893,7 +924,7 @@ function ColumnsNode({
                   <span className="text-[9px] text-muted-foreground">▪</span>
                 }
                 label={col.name}
-                meta={col.type}
+                meta={formatColumnMeta(col)}
               />
             ))
           )}

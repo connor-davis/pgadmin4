@@ -57,7 +57,14 @@ function DatabasePage() {
               <p className="text-xs text-muted-foreground">
                 <Server className="h-3 w-3 inline mr-1" />
                 {server.name} · {server.host}:{server.port}
-                {server.ssl && <Badge variant="outline" className="ml-2 text-[10px] px-1 py-0">SSL</Badge>}
+                {server.ssl && (
+                  <Badge
+                    variant="outline"
+                    className="ml-2 text-[10px] px-1 py-0"
+                  >
+                    SSL
+                  </Badge>
+                )}
               </p>
             )}
           </div>
@@ -113,7 +120,9 @@ function DatabasePage() {
                 </li>
               ))}
               {schemas.length === 0 && (
-                <li className="text-xs text-muted-foreground">No schemas found.</li>
+                <li className="text-xs text-muted-foreground">
+                  No schemas found.
+                </li>
               )}
             </ul>
           )}
@@ -149,7 +158,9 @@ function DatabasePage() {
                       <Database className="h-4 w-4 shrink-0 text-primary mt-0.5" />
                       <div className="min-w-0">
                         <p className="truncate font-medium">{t.name}</p>
-                        <p className="text-xs text-muted-foreground">{t.type}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {t.type}
+                        </p>
                       </div>
                     </button>
                   ))}

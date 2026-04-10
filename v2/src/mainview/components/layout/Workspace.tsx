@@ -1,9 +1,11 @@
 import { Database } from 'lucide-react';
 
-import { QueryToolTab } from '@/components/pgadmin/QueryToolTab';
 import { TabBar } from '@/components/layout/TabBar';
+import { ERDTab } from '@/components/pgadmin/ERDTab';
+import { QueryToolTab } from '@/components/pgadmin/QueryToolTab';
+import { ScratchPadTab } from '@/components/pgadmin/ScratchPadTab';
 import { useWorkspace } from '@/store/workspace';
-import type { QueryToolTabData } from '@/store/workspace';
+import type { ERDTabData, QueryToolTabData } from '@/store/workspace';
 
 export function Workspace() {
   const { tabs, activeTabId } = useWorkspace();
@@ -21,8 +23,17 @@ export function Workspace() {
           <div
             key={tab.id}
             className="h-full w-full"
-            style={{ display: tab.id === activeTabId ? 'flex' : 'none', flexDirection: 'column' }}
+            style={{
+              display: tab.id === activeTabId ? 'flex' : 'none',
+              flexDirection: 'column',
+            }}
           >
+            {tab.data.type === 'erd' && (
+              <ERDTab
+                serverId={(tab.data as ERDTabData).serverId}
+                database={(tab.data as ERDTabData).database}
+              />
+            )}
             {tab.data.type === 'query-tool' && (
               <QueryToolTab
                 serverId={(tab.data as QueryToolTabData).serverId}
@@ -30,6 +41,7 @@ export function Workspace() {
                 initialSql={(tab.data as QueryToolTabData).initialSql}
               />
             )}
+            {tab.data.type === 'scratch-pad' && <ScratchPadTab />}
           </div>
         ))}
       </div>

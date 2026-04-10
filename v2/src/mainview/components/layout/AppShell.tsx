@@ -8,15 +8,17 @@ import {
   Plus,
   Table2,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
-import { AddServerDialog } from '@/components/pgadmin/dialogs/AddServerDialog';
-import { PreferencesDialog } from '@/components/pgadmin/dialogs/PreferencesDialog';
 import { TitleBar } from '@/components/layout/TitleBar';
 import { Workspace } from '@/components/layout/Workspace';
 import { ObjectExplorer } from '@/components/pgadmin/ObjectExplorer';
+import { SearchObjectsDialog } from '@/components/pgadmin/SearchObjectsDialog';
+import { AddServerDialog } from '@/components/pgadmin/dialogs/AddServerDialog';
+import { PreferencesDialog } from '@/components/pgadmin/dialogs/PreferencesDialog';
 import { cn } from '@/lib/utils';
 import { PreferencesProvider } from '@/store/preferences';
+import { useWorkspace } from '@/store/workspace';
 
 // ─── Left icon strip items ────────────────────────────────────────────────────
 
@@ -67,6 +69,29 @@ export function AppShell() {
   const [dragging, setDragging] = useState(false);
   const [addServerOpen, setAddServerOpen] = useState(false);
   const [prefsOpen, setPrefsOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const { openScratchPad } = useWorkspace();
+
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'f') {
+        event.preventDefault();
+        setSearchOpen(true);
+      }
+
+      if (
+        (event.ctrlKey || event.metaKey) &&
+        event.altKey &&
+        event.key.toLowerCase() === 's'
+      ) {
+        event.preventDefault();
+        openScratchPad();
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [openScratchPad]);
 
   function onDragStart(e: React.MouseEvent) {
     e.preventDefault();
@@ -92,87 +117,89 @@ export function AppShell() {
 
   return (
     <PreferencesProvider>
-    <div className="flex h-screen w-screen flex-col overflow-hidden bg-background">
-      {/* Title bar (draggable, combined with menu bar) */}
-      <TitleBar
-        onOpenPreferences={() => setPrefsOpen(true)}
-        onAddServer={() => setAddServerOpen(true)}
-      />
+      <div className="flex h-screen w-screen flex-col overflow-hidden bg-background">
+        {/* Title bar (draggable, combined with menu bar) */}
+        <TitleBar
+          onOpenPreferences={() => setPrefsOpen(true)}
+          onAddServer={() => setAddServerOpen(true)}
+          onOpenSearch={() => setSearchOpen(true)}
+        />
 
-      {/* Body */}
-      <div className="flex flex-1 overflow-hidden">
-        {/* Icon-only sidebar strip */}
-        <div className="flex w-9 shrink-0 flex-col items-center gap-0.5 border-r border-border bg-sidebar py-1">
-          {SIDEBAR_ITEMS.map((item) => (
-            <button
-              key={item.id}
-              title={item.label}
-              onClick={() => setActiveView(item.id)}
-              className={cn(
-                'flex h-8 w-8 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground',
-                activeView === item.id &&
-                  'bg-sidebar-accent text-sidebar-foreground'
-              )}
-            >
-              {item.icon}
-            </button>
-          ))}
-        </div>
-
-        {/* Object Explorer panel (resizable) */}
-        <div
-          className="relative flex shrink-0 flex-col border-r border-border bg-sidebar overflow-hidden"
-          style={{ width: explorerWidth }}
-        >
-          {/* Panel header */}
-          <div className="flex h-8 shrink-0 items-center border-b border-sidebar-border px-2 text-xs font-medium text-sidebar-foreground uppercase tracking-wide">
-            <span className="flex-1 truncate">
-              {SIDEBAR_ITEMS.find((i) => i.id === activeView)?.label ??
-                'Object Explorer'}
-            </span>
-            {activeView === 'explorer' && (
+        {/* Body */}
+        <div className="flex flex-1 overflow-hidden">
+          {/* Icon-only sidebar strip */}
+          <div className="flex w-9 shrink-0 flex-col items-center gap-0.5 border-r border-border bg-sidebar py-1">
+            {SIDEBAR_ITEMS.map((item) => (
               <button
-                title="Add Server"
-                onClick={() => setAddServerOpen(true)}
-                className="flex h-5 w-5 items-center justify-center rounded text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground"
+                key={item.id}
+                title={item.label}
+                onClick={() => setActiveView(item.id)}
+                className={cn(
+                  'flex h-8 w-8 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground',
+                  activeView === item.id &&
+                    'bg-sidebar-accent text-sidebar-foreground'
+                )}
               >
-                <Plus className="h-3.5 w-3.5" />
+                {item.icon}
               </button>
-            )}
+            ))}
           </div>
 
-          {/* Panel content */}
-          <div className="flex-1 overflow-auto p-1">
-            {activeView === 'explorer' && (
-              <ObjectExplorer onAddServer={() => setAddServerOpen(true)} />
-            )}
-            {activeView !== 'explorer' && (
-              <p className="p-3 text-xs text-muted-foreground">
-                {SIDEBAR_ITEMS.find((i) => i.id === activeView)?.label} panel is
-                not yet implemented.
-              </p>
-            )}
-          </div>
-
-          {/* Drag handle */}
+          {/* Object Explorer panel (resizable) */}
           <div
-            onMouseDown={onDragStart}
-            className={cn(
-              'absolute right-0 top-0 h-full w-1 cursor-col-resize transition-colors hover:bg-primary/40',
-              dragging && 'bg-primary/60'
-            )}
-          />
+            className="relative flex shrink-0 flex-col border-r border-border bg-sidebar overflow-hidden"
+            style={{ width: explorerWidth }}
+          >
+            {/* Panel header */}
+            <div className="flex h-8 shrink-0 items-center border-b border-sidebar-border px-2 text-xs font-medium text-sidebar-foreground uppercase tracking-wide">
+              <span className="flex-1 truncate">
+                {SIDEBAR_ITEMS.find((i) => i.id === activeView)?.label ??
+                  'Object Explorer'}
+              </span>
+              {activeView === 'explorer' && (
+                <button
+                  title="Add Server"
+                  onClick={() => setAddServerOpen(true)}
+                  className="flex h-5 w-5 items-center justify-center rounded text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+
+            {/* Panel content */}
+            <div className="flex-1 overflow-auto p-1">
+              {activeView === 'explorer' && (
+                <ObjectExplorer onAddServer={() => setAddServerOpen(true)} />
+              )}
+              {activeView !== 'explorer' && (
+                <p className="p-3 text-xs text-muted-foreground">
+                  {SIDEBAR_ITEMS.find((i) => i.id === activeView)?.label} panel
+                  is not yet implemented.
+                </p>
+              )}
+            </div>
+
+            {/* Drag handle */}
+            <div
+              onMouseDown={onDragStart}
+              className={cn(
+                'absolute right-0 top-0 h-full w-1 cursor-col-resize transition-colors hover:bg-primary/40',
+                dragging && 'bg-primary/60'
+              )}
+            />
+          </div>
+
+          {/* Main workspace */}
+          <div className="flex flex-1 flex-col overflow-hidden">
+            <Workspace />
+          </div>
         </div>
 
-        {/* Main workspace */}
-        <div className="flex flex-1 flex-col overflow-hidden">
-          <Workspace />
-        </div>
+        <AddServerDialog open={addServerOpen} onOpenChange={setAddServerOpen} />
+        <PreferencesDialog open={prefsOpen} onOpenChange={setPrefsOpen} />
+        <SearchObjectsDialog open={searchOpen} onOpenChange={setSearchOpen} />
       </div>
-
-      <AddServerDialog open={addServerOpen} onOpenChange={setAddServerOpen} />
-      <PreferencesDialog open={prefsOpen} onOpenChange={setPrefsOpen} />
-    </div>
     </PreferencesProvider>
   );
 }

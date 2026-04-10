@@ -1,13 +1,15 @@
-import { useState } from 'react';
+//////////////////////////////////////////////////////////////////////////
+//
+// pgAdmin 4 - PostgreSQL Tools
+//
+// Copyright (C) 2013 - 2026, The pgAdmin Development Team
+// This software is released under the PostgreSQL Licence
+//
+//////////////////////////////////////////////////////////////////////////
+import { useEffect, useMemo, useState } from 'react';
 
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
+import { ResultPagination } from '@/components/pgadmin/ResultPagination';
+import { ResultTable } from '@/components/pgadmin/ResultTable';
 import { type QueryResult } from '@/lib/rpc';
 import { cn } from '@/lib/utils';
 
@@ -27,6 +29,8 @@ export function ResultsPanel({
   messages = [],
 }: ResultsPanelProps) {
   const [activeTab, setActiveTab] = useState<ResultTab>('data');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(100);
 
   const tabs: { id: ResultTab; label: string }[] = [
     { id: 'data', label: 'Data Output' },
@@ -34,18 +38,32 @@ export function ResultsPanel({
     { id: 'notifications', label: 'Notifications' },
   ];
 
+  const totalRowCount = result?.rows.length ?? 0;
+  const pageCount =
+    totalRowCount === 0 ? 1 : Math.ceil(totalRowCount / pageSize);
+  const currentPage = Math.max(1, Math.min(page, pageCount));
+  const rowOffset = (currentPage - 1) * pageSize;
+
+  const pagedRows = useMemo(
+    () => result?.rows.slice(rowOffset, rowOffset + pageSize) ?? [],
+    [pageSize, result?.rows, rowOffset]
+  );
+
+  useEffect(() => {
+    setPage(1);
+  }, [pageSize, result]);
+
   return (
     <div className="flex h-full flex-col">
-      {/* Tab strip */}
       <div className="flex shrink-0 items-center border-b border-border bg-muted/20 px-2">
         {tabs.map((tab) => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
             className={cn(
-              'px-3 py-1 text-xs border-b-2 transition-colors',
+              'border-b-2 px-3 py-1 text-xs transition-colors',
               activeTab === tab.id
-                ? 'border-primary text-foreground font-medium'
+                ? 'border-primary font-medium text-foreground'
                 : 'border-transparent text-muted-foreground hover:text-foreground'
             )}
           >
@@ -53,19 +71,18 @@ export function ResultsPanel({
           </button>
         ))}
         {result && (
-          <span className="ml-auto text-xs text-muted-foreground pr-2">
-            {result.rowCount} row{result.rowCount !== 1 ? 's' : ''}
+          <span className="ml-auto pr-2 text-xs text-muted-foreground">
+            {totalRowCount} row{totalRowCount !== 1 ? 's' : ''}
           </span>
         )}
       </div>
 
-      {/* Content */}
-      <div className="flex-1 overflow-auto">
+      <div className="min-h-0 flex-1">
         {activeTab === 'data' && (
-          <>
+          <div className="flex h-full flex-col">
             {loading && (
               <div className="flex h-full items-center justify-center">
-                <span className="text-xs text-muted-foreground animate-pulse">
+                <span className="animate-pulse text-xs text-muted-foreground">
                   Executing…
                 </span>
               </div>
@@ -73,46 +90,30 @@ export function ResultsPanel({
             {!loading && error && (
               <div className="m-3 rounded border border-destructive/40 bg-destructive/10 p-3">
                 <p className="text-xs font-medium text-destructive">Error</p>
-                <pre className="mt-1 text-xs font-mono text-destructive/80 whitespace-pre-wrap">
+                <pre className="mt-1 whitespace-pre-wrap text-xs font-mono text-destructive/80">
                   {error}
                 </pre>
               </div>
             )}
             {!loading && !error && result && result.columns.length > 0 && (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-8 text-center text-muted-foreground font-normal text-xs">
-                      #
-                    </TableHead>
-                    {result.columns.map((col) => (
-                      <TableHead key={col} className="text-xs font-semibold">
-                        {col}
-                      </TableHead>
-                    ))}
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {result.rows.map((row, i) => (
-                    <TableRow key={i}>
-                      <TableCell className="text-center text-xs text-muted-foreground">
-                        {i + 1}
-                      </TableCell>
-                      {row.map((cell, j) => (
-                        <TableCell key={j} className="text-xs font-mono">
-                          {cell === null ? (
-                            <span className="text-muted-foreground italic">
-                              NULL
-                            </span>
-                          ) : (
-                            String(cell)
-                          )}
-                        </TableCell>
-                      ))}
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+              <>
+                <div className="min-h-0 flex-1">
+                  <ResultTable
+                    columns={result.columns}
+                    rows={pagedRows}
+                    rowOffset={rowOffset}
+                    showRowNumbers
+                  />
+                </div>
+                <ResultPagination
+                  page={currentPage}
+                  pageCount={pageCount}
+                  pageSize={pageSize}
+                  totalRowCount={totalRowCount}
+                  onPageChange={setPage}
+                  onPageSizeChange={setPageSize}
+                />
+              </>
             )}
             {!loading && !error && result && result.columns.length === 0 && (
               <p className="p-4 text-xs text-muted-foreground">
@@ -124,11 +125,11 @@ export function ResultsPanel({
                 Execute a query to see results here.
               </p>
             )}
-          </>
+          </div>
         )}
 
         {activeTab === 'messages' && (
-          <pre className="p-3 text-xs font-mono text-foreground whitespace-pre-wrap">
+          <pre className="p-3 text-xs font-mono whitespace-pre-wrap text-foreground">
             {error
               ? `ERROR:  ${error}`
               : messages.length > 0

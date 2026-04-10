@@ -39,6 +39,7 @@ export type ColumnInfo = {
   name: string;
   type: string;
   nullable: boolean;
+  defaultValue: string | null;
 };
 
 export type ConstraintInfo = {
@@ -86,6 +87,35 @@ export type QueryResult = {
   columns: string[];
   rows: (string | number | boolean | null)[][];
   rowCount: number;
+};
+
+export type TableDataResult = QueryResult & {
+  page: number;
+  pageCount: number;
+  pageSize: number;
+  totalRowCount: number;
+};
+
+export type ERDTable = {
+  columns: ColumnInfo[];
+  name: string;
+  schema: string;
+  type: string;
+};
+
+export type ERDRelationship = {
+  name: string;
+  sourceColumn: string;
+  sourceSchema: string;
+  sourceTable: string;
+  targetColumn: string;
+  targetSchema: string;
+  targetTable: string;
+};
+
+export type ERDData = {
+  relationships: ERDRelationship[];
+  tables: ERDTable[];
 };
 
 export type ConnectionStatus = {
@@ -141,10 +171,11 @@ function getProxy() {
       database: string;
       schema: string;
       table: string;
-      limit?: number;
+      page?: number;
+      pageSize?: number;
       rowMode?: "first" | "last" | "all" | "filtered";
       filter?: string;
-    }) => Promise<QueryResult>;
+    }) => Promise<TableDataResult>;
     truncateTable: (params: {
       serverId: string;
       database: string;
@@ -164,6 +195,7 @@ function getProxy() {
     getRLSPolicies: (params: { serverId: string; database: string; schema: string; table: string }) => Promise<RLSPolicyInfo[]>;
     getRules: (params: { serverId: string; database: string; schema: string; table: string }) => Promise<RuleInfo[]>;
     getTriggers: (params: { serverId: string; database: string; schema: string; table: string }) => Promise<TriggerInfo[]>;
+    getERDData: (params: { serverId: string; database: string }) => Promise<ERDData>;
     minimizeWindow: () => Promise<void>;
     maximizeWindow: () => Promise<void>;
     closeWindow: () => Promise<void>;
@@ -214,11 +246,23 @@ export const rpc = {
     database: string,
     schema: string,
     table: string,
-    limit?: number,
-    rowMode?: 'first' | 'last' | 'all' | 'filtered',
-    filter?: string
+    options?: {
+      page?: number;
+      pageSize?: number;
+      rowMode?: 'first' | 'last' | 'all' | 'filtered';
+      filter?: string;
+    }
   ) =>
-    getProxy().getTableData({ serverId, database, schema, table, limit, rowMode, filter }),
+    getProxy().getTableData({
+      serverId,
+      database,
+      schema,
+      table,
+      page: options?.page,
+      pageSize: options?.pageSize,
+      rowMode: options?.rowMode,
+      filter: options?.filter,
+    }),
   truncateTable: (
     serverId: string,
     database: string,
@@ -243,6 +287,8 @@ export const rpc = {
     getProxy().getRules({ serverId, database, schema, table }),
   getTriggers: (serverId: string, database: string, schema: string, table: string) =>
     getProxy().getTriggers({ serverId, database, schema, table }),
+  getERDData: (serverId: string, database: string) =>
+    getProxy().getERDData({ serverId, database }),
   minimizeWindow: () => getProxy().minimizeWindow(),
   maximizeWindow: () => getProxy().maximizeWindow(),
   closeWindow: () => getProxy().closeWindow(),

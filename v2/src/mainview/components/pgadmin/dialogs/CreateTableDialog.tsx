@@ -98,7 +98,7 @@ export function CreateTableDialog({
     setLoading(true);
     setError(null);
     try {
-      const cols: ColumnDef[] = columns.map(({ _id: _unused, ...rest }) => ({
+      const cols: ColumnDef[] = columns.map(({ ...rest }) => ({
         ...rest,
         defaultValue: rest.defaultValue || undefined,
       }));
@@ -176,7 +176,9 @@ export function CreateTableDialog({
                   />
                   <Select
                     value={col.type}
-                    onValueChange={(v) => v !== null && updateColumn(col._id, { type: v })}
+                    onValueChange={(v) =>
+                      v !== null && updateColumn(col._id, { type: v })
+                    }
                   >
                     <SelectTrigger size="sm" className="h-7 text-xs">
                       <SelectValue />

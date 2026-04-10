@@ -9,7 +9,6 @@
  * Usage:
  *   <PgAdminIcon className="h-5 w-5 text-primary" />
  */
-
 import { siPostgresql } from 'simple-icons';
 
 interface PgAdminIconProps {

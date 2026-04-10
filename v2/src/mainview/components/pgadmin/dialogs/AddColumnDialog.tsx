@@ -104,7 +104,9 @@ export function AddColumnDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Add Column to "{schema}.{table}"</DialogTitle>
+          <DialogTitle>
+            Add Column to "{schema}.{table}"
+          </DialogTitle>
         </DialogHeader>
         <form className="grid gap-4" onSubmit={handleSubmit}>
           <div className="grid gap-1.5">
@@ -120,7 +122,10 @@ export function AddColumnDialog({
 
           <div className="grid gap-1.5">
             <Label htmlFor="col-type">Type</Label>
-            <Select value={col.type} onValueChange={(v) => v !== null && patch({ type: v })}>
+            <Select
+              value={col.type}
+              onValueChange={(v) => v !== null && patch({ type: v })}
+            >
               <SelectTrigger id="col-type" className="w-full">
                 <SelectValue />
               </SelectTrigger>

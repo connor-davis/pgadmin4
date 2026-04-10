@@ -50,7 +50,10 @@ function reducer(
     case 'SET_CSS_VAR':
       return {
         ...state,
-        cssVarOverrides: { ...state.cssVarOverrides, [action.key]: action.value },
+        cssVarOverrides: {
+          ...state.cssVarOverrides,
+          [action.key]: action.value,
+        },
       };
     case 'RESET_CSS_VARS':
       return { ...state, cssVarOverrides: {} };
