@@ -1,5 +1,13 @@
 # pgAdmin 4 - Copilot Instructions
 
+## CRITICAL: Working Directory Constraint
+
+**All file edits, creations, and deletions MUST occur inside the `v2/` directory.**
+
+- Never modify any files outside of `v2/` — this includes `web/`, `runtime/`, `pkg/`, `docs/`, root config files, or any other top-level path.
+- The `v2/` directory contains the active Electrobun-based desktop app rewrite. All development work happens there.
+- If a user request would require changes outside `v2/`, stop and explain the constraint rather than making those changes.
+
 ## Architecture
 
 pgAdmin 4 is a Flask (Python) + React (JavaScript) web application for managing PostgreSQL databases. It can run as a standalone desktop app (via an Electron runtime in `runtime/`) or as a web server.
