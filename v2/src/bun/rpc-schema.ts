@@ -80,6 +80,12 @@ export type ERDData = {
   tables: ERDTable[];
 };
 
+export type GetERDDataParams = {
+  serverId: string;
+  database: string;
+  schema?: string;
+};
+
 export type ConnectionStatus = {
   connected: boolean;
   error?: string;
@@ -281,7 +287,7 @@ export type PgAdminRPCSchema = {
         response: TriggerInfo[];
       };
       getERDData: {
-        params: { serverId: string; database: string };
+        params: GetERDDataParams;
         response: ERDData;
       };
       minimizeWindow: { params: undefined; response: void };
@@ -289,10 +295,10 @@ export type PgAdminRPCSchema = {
       closeWindow: { params: undefined; response: void };
       getWindowState: { params: undefined; response: { maximized: boolean } };
     };
-    messages: Record<string, unknown>;
+    messages: {};
   };
   webview: {
-    requests: Record<string, unknown>;
-    messages: Record<string, unknown>;
+    requests: {};
+    messages: {};
   };
 };

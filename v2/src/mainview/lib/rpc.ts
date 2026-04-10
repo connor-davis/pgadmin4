@@ -118,6 +118,12 @@ export type ERDData = {
   tables: ERDTable[];
 };
 
+export type GetERDDataParams = {
+  serverId: string;
+  database: string;
+  schema?: string;
+};
+
 export type ConnectionStatus = {
   connected: boolean;
   error?: string;
@@ -195,7 +201,7 @@ function getProxy() {
     getRLSPolicies: (params: { serverId: string; database: string; schema: string; table: string }) => Promise<RLSPolicyInfo[]>;
     getRules: (params: { serverId: string; database: string; schema: string; table: string }) => Promise<RuleInfo[]>;
     getTriggers: (params: { serverId: string; database: string; schema: string; table: string }) => Promise<TriggerInfo[]>;
-    getERDData: (params: { serverId: string; database: string }) => Promise<ERDData>;
+    getERDData: (params: GetERDDataParams) => Promise<ERDData>;
     minimizeWindow: () => Promise<void>;
     maximizeWindow: () => Promise<void>;
     closeWindow: () => Promise<void>;
@@ -287,8 +293,8 @@ export const rpc = {
     getProxy().getRules({ serverId, database, schema, table }),
   getTriggers: (serverId: string, database: string, schema: string, table: string) =>
     getProxy().getTriggers({ serverId, database, schema, table }),
-  getERDData: (serverId: string, database: string) =>
-    getProxy().getERDData({ serverId, database }),
+  getERDData: (serverId: string, database: string, schema?: string) =>
+    getProxy().getERDData({ serverId, database, schema }),
   minimizeWindow: () => getProxy().minimizeWindow(),
   maximizeWindow: () => getProxy().maximizeWindow(),
   closeWindow: () => getProxy().closeWindow(),
@@ -327,4 +333,6 @@ export const queryKeys = {
     ['rules', serverId, database, schema, table] as const,
   triggers: (serverId: string, database: string, schema: string, table: string) =>
     ['triggers', serverId, database, schema, table] as const,
+  erdData: (serverId: string, database: string, schema?: string) =>
+    ['erd-data', serverId, database, schema ?? null] as const,
 };

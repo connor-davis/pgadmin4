@@ -33,6 +33,7 @@ export interface ERDTabData {
   type: 'erd';
   serverId: string;
   database: string;
+  schema?: string;
   title: string;
 }
 
@@ -79,7 +80,8 @@ function reducer(
           const existingData = t.data as ERDTabData;
           return (
             existingData.serverId === newData.serverId &&
-            existingData.database === newData.database
+            existingData.database === newData.database &&
+            existingData.schema === newData.schema
           );
         });
 
@@ -133,7 +135,7 @@ function reducer(
 interface WorkspaceContextValue {
   tabs: WorkspaceTab[];
   activeTabId: string | null;
-  openERD: (serverId: string, database: string) => void;
+  openERD: (serverId: string, database: string, schema?: string) => void;
   openQueryTool: (serverId: string, database: string) => void;
   openScratchPad: () => void;
   openViewData: (
@@ -162,20 +164,24 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     activeTabId: null,
   });
 
-  const openERD = useCallback((serverId: string, database: string) => {
-    dispatch({
-      type: 'OPEN_TAB',
-      tab: {
-        id: `erd-${serverId}-${database}`,
-        data: {
-          type: 'erd',
-          serverId,
-          database,
-          title: `${database} ERD`,
+  const openERD = useCallback(
+    (serverId: string, database: string, schema?: string) => {
+      dispatch({
+        type: 'OPEN_TAB',
+        tab: {
+          id: `erd-${serverId}-${database}-${schema ?? '__database__'}`,
+          data: {
+            type: 'erd',
+            serverId,
+            database,
+            schema,
+            title: schema ? `${database}.${schema} ERD` : `${database} ERD`,
+          },
         },
-      },
-    });
-  }, []);
+      });
+    },
+    []
+  );
 
   const openQueryTool = useCallback((serverId: string, database: string) => {
     const id = `query-tool-${serverId}-${database}-${Date.now()}`;

@@ -1,8 +1,8 @@
 {
-  "name": "pgadmin4-v2",
+  "name": "viper",
   "version": "0.1.0",
   "type": "module",
-  "description": "pgAdmin 4 v2 — Electrobun + ShadCN + TanStack Router",
+  "description": "Viper — Electrobun + ShadCN + TanStack Router",
   "scripts": {
     "dev": "vite build && concurrently \"vite build --watch\" \"electrobun dev --watch\"",
     "dev:hmr": "vite build && concurrently \"vite --port 5173\" \"electrobun dev --watch --hmr http://localhost:5173\"",

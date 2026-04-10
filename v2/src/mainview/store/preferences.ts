@@ -6,26 +6,98 @@ import React, {
   useReducer,
 } from 'react';
 
-// ─── CSS variable keys exposed for customisation ───────────────────────────────
-
-export const THEME_VAR_LABELS: Record<string, string> = {
-  '--background': 'Background',
-  '--foreground': 'Foreground',
-  '--primary': 'Primary',
-  '--primary-foreground': 'Primary Foreground',
-  '--secondary': 'Secondary',
-  '--accent': 'Accent',
-  '--muted': 'Muted',
-  '--border': 'Border',
-  '--ring': 'Ring',
-  '--destructive': 'Destructive',
-  '--sidebar': 'Sidebar Background',
+export type ThemeVariableDefinition = {
+  key: string;
+  label: string;
 };
 
-// ─── Types ─────────────────────────────────────────────────────────────────────
+export type ThemeVariableSection = {
+  id: string;
+  category: 'appearance' | 'sidebar';
+  label: string;
+  description: string;
+  variables: ThemeVariableDefinition[];
+};
+
+export const THEME_VAR_SECTIONS: ThemeVariableSection[] = [
+  {
+    id: 'core-colours',
+    category: 'appearance',
+    label: 'Core Colours',
+    description: 'Primary application colours used throughout the main workspace.',
+    variables: [
+      { key: '--background', label: 'Background' },
+      { key: '--foreground', label: 'Foreground' },
+      { key: '--primary', label: 'Primary' },
+      { key: '--primary-foreground', label: 'Primary Foreground' },
+      { key: '--secondary', label: 'Secondary' },
+      { key: '--secondary-foreground', label: 'Secondary Foreground' },
+      { key: '--accent', label: 'Accent' },
+      { key: '--accent-foreground', label: 'Accent Foreground' },
+      { key: '--destructive', label: 'Destructive' },
+    ],
+  },
+  {
+    id: 'surface-colours',
+    category: 'appearance',
+    label: 'Surface Colours',
+    description: 'Cards, popovers, inputs, muted surfaces, and borders.',
+    variables: [
+      { key: '--card', label: 'Card Background' },
+      { key: '--card-foreground', label: 'Card Foreground' },
+      { key: '--popover', label: 'Popover Background' },
+      { key: '--popover-foreground', label: 'Popover Foreground' },
+      { key: '--muted', label: 'Muted Background' },
+      { key: '--muted-foreground', label: 'Muted Foreground' },
+      { key: '--border', label: 'Border' },
+      { key: '--input', label: 'Input Border' },
+      { key: '--ring', label: 'Focus Ring' },
+    ],
+  },
+  {
+    id: 'chart-colours',
+    category: 'appearance',
+    label: 'Chart Colours',
+    description: 'Chart palette tokens used by data visualizations.',
+    variables: [
+      { key: '--chart-1', label: 'Chart 1' },
+      { key: '--chart-2', label: 'Chart 2' },
+      { key: '--chart-3', label: 'Chart 3' },
+      { key: '--chart-4', label: 'Chart 4' },
+      { key: '--chart-5', label: 'Chart 5' },
+    ],
+  },
+  {
+    id: 'sidebar-colours',
+    category: 'sidebar',
+    label: 'Sidebar Colours',
+    description: 'Object explorer, navigation rails, and settings sidebar tokens.',
+    variables: [
+      { key: '--sidebar', label: 'Sidebar Background' },
+      { key: '--sidebar-foreground', label: 'Sidebar Foreground' },
+      { key: '--sidebar-primary', label: 'Sidebar Primary' },
+      {
+        key: '--sidebar-primary-foreground',
+        label: 'Sidebar Primary Foreground',
+      },
+      { key: '--sidebar-accent', label: 'Sidebar Accent' },
+      {
+        key: '--sidebar-accent-foreground',
+        label: 'Sidebar Accent Foreground',
+      },
+      { key: '--sidebar-border', label: 'Sidebar Border' },
+      { key: '--sidebar-ring', label: 'Sidebar Focus Ring' },
+    ],
+  },
+];
+
+export const THEME_VAR_LABELS = Object.fromEntries(
+  THEME_VAR_SECTIONS.flatMap((section) =>
+    section.variables.map((variable) => [variable.key, variable.label])
+  )
+) as Record<string, string>;
 
 export interface PreferencesState {
-  /** Custom CSS variable overrides applied on top of the active theme */
   cssVarOverrides: Record<string, string>;
 }
 
@@ -34,13 +106,11 @@ type PreferencesAction =
   | { type: 'RESET_CSS_VARS' }
   | { type: 'LOAD'; state: PreferencesState };
 
-const STORAGE_KEY = 'pgadmin4-prefs';
+const STORAGE_KEY = 'viper-prefs';
 
 const defaultState: PreferencesState = {
   cssVarOverrides: {},
 };
-
-// ─── Reducer ───────────────────────────────────────────────────────────────────
 
 function reducer(
   state: PreferencesState,
@@ -64,8 +134,6 @@ function reducer(
   }
 }
 
-// ─── Context ───────────────────────────────────────────────────────────────────
-
 interface PreferencesContextValue {
   prefs: PreferencesState;
   setCssVar: (key: string, value: string) => void;
@@ -73,8 +141,6 @@ interface PreferencesContextValue {
 }
 
 const PreferencesContext = createContext<PreferencesContextValue | null>(null);
-
-// ─── Provider ──────────────────────────────────────────────────────────────────
 
 export function PreferencesProvider({
   children,
@@ -91,7 +157,6 @@ export function PreferencesProvider({
     return init;
   });
 
-  // Persist whenever prefs change
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(prefs));
@@ -100,15 +165,17 @@ export function PreferencesProvider({
     }
   }, [prefs]);
 
-  // Apply custom CSS vars to :root
   useEffect(() => {
     const root = document.documentElement;
-    // Clear any previously-set overrides then apply current ones
+
     for (const key of Object.keys(THEME_VAR_LABELS)) {
       root.style.removeProperty(key);
     }
+
     for (const [key, value] of Object.entries(prefs.cssVarOverrides)) {
-      if (value) root.style.setProperty(key, value);
+      if (value) {
+        root.style.setProperty(key, value);
+      }
     }
   }, [prefs.cssVarOverrides]);
 
@@ -126,8 +193,6 @@ export function PreferencesProvider({
     children
   );
 }
-
-// ─── Hook ──────────────────────────────────────────────────────────────────────
 
 export function usePreferences(): PreferencesContextValue {
   const ctx = useContext(PreferencesContext);

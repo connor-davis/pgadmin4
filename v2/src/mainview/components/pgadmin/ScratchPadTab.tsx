@@ -12,7 +12,7 @@ import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 
-const STORAGE_KEY = 'pgadmin4-scratch-pad';
+const STORAGE_KEY = 'viper-scratch-pad';
 
 export function ScratchPadTab() {
   const [value, setValue] = useState(

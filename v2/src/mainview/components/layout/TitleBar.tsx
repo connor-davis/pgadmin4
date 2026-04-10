@@ -76,7 +76,7 @@ export function TitleBar({
         { label: 'Reset Layout', onClick: () => {} },
         { separator: true },
         {
-          label: 'Quit pgAdmin 4',
+          label: 'Quit Viper',
           shortcut: 'Alt+F4',
           onClick: () => handleClose(),
         },
@@ -151,7 +151,7 @@ export function TitleBar({
         <div className="electrobun-webkit-app-region-no-drag flex shrink-0 items-center gap-1.5 pl-3 pr-2">
           <PgAdminIcon className="h-4 w-4 text-primary" />
           <span className="text-xs font-semibold text-foreground">
-            pgAdmin 4
+            Viper
           </span>
         </div>
 

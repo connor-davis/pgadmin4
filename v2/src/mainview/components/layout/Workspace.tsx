@@ -32,6 +32,7 @@ export function Workspace() {
               <ERDTab
                 serverId={(tab.data as ERDTabData).serverId}
                 database={(tab.data as ERDTabData).database}
+                schema={(tab.data as ERDTabData).schema}
               />
             )}
             {tab.data.type === 'query-tool' && (
@@ -56,7 +57,7 @@ function WelcomeScreen() {
         <Database className="h-8 w-8 text-primary" />
       </div>
       <div>
-        <h2 className="text-lg font-semibold text-foreground">pgAdmin 4</h2>
+        <h2 className="text-lg font-semibold text-foreground">Viper</h2>
         <p className="mt-1 max-w-xs text-sm text-muted-foreground">
           Select a database in the Object Explorer and click the Query Tool
           button to start writing SQL.

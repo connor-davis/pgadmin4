@@ -2,8 +2,8 @@ import type { ElectrobunConfig } from "electrobun";
 
 export default {
   app: {
-    name: "pgAdmin 4",
-    identifier: "org.pgadmin.pgadmin4",
+    name: "Viper",
+    identifier: "com.viper.app",
     version: "0.1.0",
   },
   build: {

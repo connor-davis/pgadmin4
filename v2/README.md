@@ -1,6 +1,6 @@
-# pgAdmin 4 — v2 (Electrobun + ShadCN + TanStack Router)
+# Viper (Electrobun + ShadCN + TanStack Router)
 
-A modern rewrite of the pgAdmin 4 desktop UI using:
+A modern PostgreSQL admin desktop app built with:
 
 - **[Electrobun](https://blackboard.sh/electrobun/)** — native desktop runtime (replaces Electron)
 - **[ShadCN](https://ui.shadcn.com/)** — React component library with Tailwind CSS
@@ -8,14 +8,14 @@ A modern rewrite of the pgAdmin 4 desktop UI using:
 - **[TanStack Query](https://tanstack.com/query)** — data fetching & caching
 - **Vite** — frontend bundler
 
-The existing Flask backend (`web/pgAdmin4.py`) is reused unchanged.
+The existing Flask backend (`web/pgAdmin4.py`) is reused unchanged behind Viper.
 
 ---
 
 ## Requirements
 
 - [Bun](https://bun.sh/) >= 1.0
-- Python with pgAdmin 4 dependencies installed (see `../requirements.txt`)
+- Python with the existing backend dependencies installed (see `../requirements.txt`)
 
 ## Setup
 

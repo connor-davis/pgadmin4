@@ -14,7 +14,9 @@ import type {
   ERDData,
   ERDRelationship,
   ERDTable,
+  GetERDDataParams,
   IndexInfo,
+  PgAdminRPCSchema,
   QueryResult,
   RLSPolicyInfo,
   RuleInfo,
@@ -28,8 +30,8 @@ import type {
 // ─── App data directory ───────────────────────────────────────────────────────
 
 const userDataDir = process.env.APPDATA
-  ? path.join(process.env.APPDATA, 'pgadmin4-v2')
-  : path.join(os.homedir(), '.pgadmin4-v2');
+  ? path.join(process.env.APPDATA, 'Viper')
+  : path.join(os.homedir(), '.viper');
 
 if (!fs.existsSync(userDataDir)) {
   fs.mkdirSync(userDataDir, { recursive: true });
@@ -163,7 +165,7 @@ let mainWindow: BrowserWindow | null = null;
 
 // ─── RPC handlers ─────────────────────────────────────────────────────────────
 
-const rpc = BrowserView.defineRPC({
+const rpc = BrowserView.defineRPC<PgAdminRPCSchema>({
   handlers: {
     requests: {
       listServers: (): ServerConfig[] => {
@@ -697,83 +699,159 @@ const rpc = BrowserView.defineRPC({
         return rows;
       },
 
-      getERDData: async (params: ServerDatabaseParams): Promise<ERDData> => {
+      getERDData: async (params: GetERDDataParams): Promise<ERDData> => {
         const conn = await getConnection(params!.serverId, params!.database);
-        const tables = await conn<
-          { name: string; schema: string; type: string }[]
-        >`
-          SELECT cls.relname AS name,
-                 ns.nspname AS schema,
-                 CASE cls.relkind
-                   WHEN 'p' THEN 'partitioned table'
-                   ELSE 'table'
-                 END AS type
-          FROM   pg_catalog.pg_class cls
-          JOIN   pg_catalog.pg_namespace ns ON ns.oid = cls.relnamespace
-          WHERE  cls.relkind IN ('r', 'p')
-            AND  ns.nspname NOT IN ('pg_catalog', 'information_schema')
-          ORDER  BY ns.nspname, cls.relname
-        `;
+        const tables = params!.schema
+          ? await conn<
+              { name: string; schema: string; type: string }[]
+            >`
+              SELECT cls.relname AS name,
+                     ns.nspname AS schema,
+                     CASE cls.relkind
+                       WHEN 'p' THEN 'partitioned table'
+                       ELSE 'table'
+                     END AS type
+              FROM   pg_catalog.pg_class cls
+              JOIN   pg_catalog.pg_namespace ns ON ns.oid = cls.relnamespace
+              WHERE  cls.relkind IN ('r', 'p')
+                AND  ns.nspname = ${params!.schema}
+              ORDER  BY ns.nspname, cls.relname
+            `
+          : await conn<
+              { name: string; schema: string; type: string }[]
+            >`
+              SELECT cls.relname AS name,
+                     ns.nspname AS schema,
+                     CASE cls.relkind
+                       WHEN 'p' THEN 'partitioned table'
+                       ELSE 'table'
+                     END AS type
+              FROM   pg_catalog.pg_class cls
+              JOIN   pg_catalog.pg_namespace ns ON ns.oid = cls.relnamespace
+              WHERE  cls.relkind IN ('r', 'p')
+                AND  ns.nspname NOT IN ('pg_catalog', 'information_schema')
+              ORDER  BY ns.nspname, cls.relname
+            `;
 
-        const columns = await conn<
-          {
-            column_default: string | null;
-            is_nullable: string;
-            name: string;
-            schema: string;
-            table_name: string;
-            type: string;
-          }[]
-        >`
-          SELECT column_name AS name,
-                 column_default,
-                 data_type AS type,
-                 is_nullable,
-                 table_name,
-                 table_schema AS schema
-          FROM   information_schema.columns
-          WHERE  table_schema NOT IN ('pg_catalog', 'information_schema')
-          ORDER  BY table_schema, table_name, ordinal_position
-        `;
+        const columns = params!.schema
+          ? await conn<
+              {
+                column_default: string | null;
+                is_nullable: string;
+                name: string;
+                schema: string;
+                table_name: string;
+                type: string;
+              }[]
+            >`
+              SELECT column_name AS name,
+                     column_default,
+                     data_type AS type,
+                     is_nullable,
+                     table_name,
+                     table_schema AS schema
+              FROM   information_schema.columns
+              WHERE  table_schema = ${params!.schema}
+              ORDER  BY table_schema, table_name, ordinal_position
+            `
+          : await conn<
+              {
+                column_default: string | null;
+                is_nullable: string;
+                name: string;
+                schema: string;
+                table_name: string;
+                type: string;
+              }[]
+            >`
+              SELECT column_name AS name,
+                     column_default,
+                     data_type AS type,
+                     is_nullable,
+                     table_name,
+                     table_schema AS schema
+              FROM   information_schema.columns
+              WHERE  table_schema NOT IN ('pg_catalog', 'information_schema')
+              ORDER  BY table_schema, table_name, ordinal_position
+            `;
 
-        const relationships = await conn<
-          {
-            name: string;
-            source_column: string;
-            source_schema: string;
-            source_table: string;
-            target_column: string;
-            target_schema: string;
-            target_table: string;
-          }[]
-        >`
-          SELECT con.conname AS name,
-                 src_att.attname AS source_column,
-                 src_ns.nspname AS source_schema,
-                 src.relname AS source_table,
-                 tgt_att.attname AS target_column,
-                 tgt_ns.nspname AS target_schema,
-                 tgt.relname AS target_table
-          FROM   pg_catalog.pg_constraint con
-          JOIN   pg_catalog.pg_class src ON src.oid = con.conrelid
-          JOIN   pg_catalog.pg_namespace src_ns ON src_ns.oid = src.relnamespace
-          JOIN   pg_catalog.pg_class tgt ON tgt.oid = con.confrelid
-          JOIN   pg_catalog.pg_namespace tgt_ns ON tgt_ns.oid = tgt.relnamespace
-          JOIN   unnest(con.conkey) WITH ORDINALITY AS src_key(attnum, ordinality)
-                   ON true
-          JOIN   unnest(con.confkey) WITH ORDINALITY AS tgt_key(attnum, ordinality)
-                   ON tgt_key.ordinality = src_key.ordinality
-          JOIN   pg_catalog.pg_attribute src_att
-                   ON src_att.attrelid = src.oid
-                  AND src_att.attnum = src_key.attnum
-          JOIN   pg_catalog.pg_attribute tgt_att
-                   ON tgt_att.attrelid = tgt.oid
-                  AND tgt_att.attnum = tgt_key.attnum
-          WHERE  con.contype = 'f'
-            AND  src_ns.nspname NOT IN ('pg_catalog', 'information_schema')
-            AND  tgt_ns.nspname NOT IN ('pg_catalog', 'information_schema')
-          ORDER  BY src_ns.nspname, src.relname, con.conname, src_key.ordinality
-        `;
+        const relationships = params!.schema
+          ? await conn<
+              {
+                name: string;
+                source_column: string;
+                source_schema: string;
+                source_table: string;
+                target_column: string;
+                target_schema: string;
+                target_table: string;
+              }[]
+            >`
+              SELECT con.conname AS name,
+                     src_att.attname AS source_column,
+                     src_ns.nspname AS source_schema,
+                     src.relname AS source_table,
+                     tgt_att.attname AS target_column,
+                     tgt_ns.nspname AS target_schema,
+                     tgt.relname AS target_table
+              FROM   pg_catalog.pg_constraint con
+              JOIN   pg_catalog.pg_class src ON src.oid = con.conrelid
+              JOIN   pg_catalog.pg_namespace src_ns ON src_ns.oid = src.relnamespace
+              JOIN   pg_catalog.pg_class tgt ON tgt.oid = con.confrelid
+              JOIN   pg_catalog.pg_namespace tgt_ns ON tgt_ns.oid = tgt.relnamespace
+              JOIN   unnest(con.conkey) WITH ORDINALITY AS src_key(attnum, ordinality)
+                       ON true
+              JOIN   unnest(con.confkey) WITH ORDINALITY AS tgt_key(attnum, ordinality)
+                       ON tgt_key.ordinality = src_key.ordinality
+              JOIN   pg_catalog.pg_attribute src_att
+                       ON src_att.attrelid = src.oid
+                      AND src_att.attnum = src_key.attnum
+              JOIN   pg_catalog.pg_attribute tgt_att
+                       ON tgt_att.attrelid = tgt.oid
+                      AND tgt_att.attnum = tgt_key.attnum
+              WHERE  con.contype = 'f'
+                AND  src_ns.nspname = ${params!.schema}
+                AND  tgt_ns.nspname = ${params!.schema}
+              ORDER  BY src_ns.nspname, src.relname, con.conname, src_key.ordinality
+            `
+          : await conn<
+              {
+                name: string;
+                source_column: string;
+                source_schema: string;
+                source_table: string;
+                target_column: string;
+                target_schema: string;
+                target_table: string;
+              }[]
+            >`
+              SELECT con.conname AS name,
+                     src_att.attname AS source_column,
+                     src_ns.nspname AS source_schema,
+                     src.relname AS source_table,
+                     tgt_att.attname AS target_column,
+                     tgt_ns.nspname AS target_schema,
+                     tgt.relname AS target_table
+              FROM   pg_catalog.pg_constraint con
+              JOIN   pg_catalog.pg_class src ON src.oid = con.conrelid
+              JOIN   pg_catalog.pg_namespace src_ns ON src_ns.oid = src.relnamespace
+              JOIN   pg_catalog.pg_class tgt ON tgt.oid = con.confrelid
+              JOIN   pg_catalog.pg_namespace tgt_ns ON tgt_ns.oid = tgt.relnamespace
+              JOIN   unnest(con.conkey) WITH ORDINALITY AS src_key(attnum, ordinality)
+                       ON true
+              JOIN   unnest(con.confkey) WITH ORDINALITY AS tgt_key(attnum, ordinality)
+                       ON tgt_key.ordinality = src_key.ordinality
+              JOIN   pg_catalog.pg_attribute src_att
+                       ON src_att.attrelid = src.oid
+                      AND src_att.attnum = src_key.attnum
+              JOIN   pg_catalog.pg_attribute tgt_att
+                       ON tgt_att.attrelid = tgt.oid
+                      AND tgt_att.attnum = tgt_key.attnum
+              WHERE  con.contype = 'f'
+                AND  src_ns.nspname NOT IN ('pg_catalog', 'information_schema')
+                AND  tgt_ns.nspname NOT IN ('pg_catalog', 'information_schema')
+              ORDER  BY src_ns.nspname, src.relname, con.conname, src_key.ordinality
+            `;
 
         const columnsByTable = new Map<string, ColumnInfo[]>();
         for (const column of columns) {
@@ -817,10 +895,18 @@ const rpc = BrowserView.defineRPC({
       },
 
       maximizeWindow: (): void => {
-        if (mainWindow?.isMaximized()) {
+        if (!mainWindow) {
+          return;
+        }
+
+        if (mainWindow.isFullScreen()) {
+          mainWindow.setFullScreen(false);
+        }
+
+        if (mainWindow.isMaximized()) {
           mainWindow.unmaximize();
         } else {
-          mainWindow?.maximize();
+          mainWindow.maximize();
         }
       },
 
@@ -877,7 +963,7 @@ const rpc = BrowserView.defineRPC({
 // ─── Window ───────────────────────────────────────────────────────────────────
 
 mainWindow = new BrowserWindow({
-  title: 'pgAdmin 4',
+  title: 'Viper',
   url: 'views://mainview/index.html',
   frame: { width: 1280, height: 720, x: 100, y: 100 },
   titleBarStyle: 'hidden',
@@ -896,4 +982,4 @@ mainWindow.on('close', async () => {
   db.close();
 });
 
-console.log('[pgAdmin v2] App started.');
+console.log('[Viper] App started.');

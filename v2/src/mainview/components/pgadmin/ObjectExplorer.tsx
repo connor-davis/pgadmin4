@@ -216,7 +216,7 @@ function ServerNode({
         open={removeOpen}
         onOpenChange={setRemoveOpen}
         title="Remove Server"
-        description={`Remove "${server.name}" (${server.host}:${server.port}) from pgAdmin? The server itself will not be affected.`}
+        description={`Remove "${server.name}" (${server.host}:${server.port}) from Viper? The server itself will not be affected.`}
         confirmLabel="Remove"
         onConfirm={handleRemove}
       />
@@ -359,6 +359,7 @@ function SchemaNode({
   const [createTableOpen, setCreateTableOpen] = useState(false);
   const [dropOpen, setDropOpen] = useState(false);
   const queryClient = useQueryClient();
+  const { openERD } = useWorkspace();
 
   const { data: tables = [], isLoading } = useQuery({
     queryKey: queryKeys.tables(serverId, database, schema.name),
@@ -400,6 +401,10 @@ function SchemaNode({
           <ContextMenuItem onClick={() => setCreateTableOpen(true)}>
             <Plus className="h-3.5 w-3.5" />
             Create Table
+          </ContextMenuItem>
+          <ContextMenuItem onClick={() => openERD(serverId, database, schema.name)}>
+            <LayoutGrid className="h-3.5 w-3.5" />
+            Open ERD
           </ContextMenuItem>
           <ContextMenuSeparator />
           <ContextMenuItem onClick={handleRefresh}>
