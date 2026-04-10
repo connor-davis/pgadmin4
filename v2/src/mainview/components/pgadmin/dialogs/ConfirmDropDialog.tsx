@@ -17,6 +17,7 @@ interface ConfirmDropDialogProps {
   title: string;
   description: string;
   onConfirm: () => Promise<void>;
+  confirmLabel?: string;
 }
 
 export function ConfirmDropDialog({
@@ -25,6 +26,7 @@ export function ConfirmDropDialog({
   title,
   description,
   onConfirm,
+  confirmLabel = 'Drop',
 }: ConfirmDropDialogProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -64,7 +66,7 @@ export function ConfirmDropDialog({
             disabled={loading}
           >
             {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Drop
+            {confirmLabel}
           </Button>
         </DialogFooter>
       </DialogContent>

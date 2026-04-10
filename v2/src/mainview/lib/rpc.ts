@@ -136,12 +136,38 @@ function getProxy() {
       columns: ColumnDef[];
     }) => Promise<TableInfo>;
     dropTable: (params: { serverId: string; database: string; schema: string; name: string; cascade?: boolean }) => Promise<{ success: boolean }>;
-    getTableData: (params: { serverId: string; database: string; schema: string; table: string; limit?: number }) => Promise<QueryResult>;
+    getTableData: (params: {
+      serverId: string;
+      database: string;
+      schema: string;
+      table: string;
+      limit?: number;
+      rowMode?: "first" | "last" | "all" | "filtered";
+      filter?: string;
+    }) => Promise<QueryResult>;
+    truncateTable: (params: {
+      serverId: string;
+      database: string;
+      schema: string;
+      table: string;
+      mode: "plain" | "cascade" | "restart" | "cascade_restart";
+    }) => Promise<{ success: boolean }>;
+    addColumn: (params: {
+      serverId: string;
+      database: string;
+      schema: string;
+      table: string;
+      column: ColumnDef;
+    }) => Promise<ColumnInfo>;
     getConstraints: (params: { serverId: string; database: string; schema: string; table: string }) => Promise<ConstraintInfo[]>;
     getIndexes: (params: { serverId: string; database: string; schema: string; table: string }) => Promise<IndexInfo[]>;
     getRLSPolicies: (params: { serverId: string; database: string; schema: string; table: string }) => Promise<RLSPolicyInfo[]>;
     getRules: (params: { serverId: string; database: string; schema: string; table: string }) => Promise<RuleInfo[]>;
     getTriggers: (params: { serverId: string; database: string; schema: string; table: string }) => Promise<TriggerInfo[]>;
+    minimizeWindow: () => Promise<void>;
+    maximizeWindow: () => Promise<void>;
+    closeWindow: () => Promise<void>;
+    getWindowState: () => Promise<{ maximized: boolean }>;
   };
 }
 
@@ -183,8 +209,30 @@ export const rpc = {
   ) => getProxy().createTable({ serverId, database, schema, name, columns }),
   dropTable: (serverId: string, database: string, schema: string, name: string, cascade?: boolean) =>
     getProxy().dropTable({ serverId, database, schema, name, cascade }),
-  getTableData: (serverId: string, database: string, schema: string, table: string, limit?: number) =>
-    getProxy().getTableData({ serverId, database, schema, table, limit }),
+  getTableData: (
+    serverId: string,
+    database: string,
+    schema: string,
+    table: string,
+    limit?: number,
+    rowMode?: 'first' | 'last' | 'all' | 'filtered',
+    filter?: string
+  ) =>
+    getProxy().getTableData({ serverId, database, schema, table, limit, rowMode, filter }),
+  truncateTable: (
+    serverId: string,
+    database: string,
+    schema: string,
+    table: string,
+    mode: 'plain' | 'cascade' | 'restart' | 'cascade_restart'
+  ) => getProxy().truncateTable({ serverId, database, schema, table, mode }),
+  addColumn: (
+    serverId: string,
+    database: string,
+    schema: string,
+    table: string,
+    column: ColumnDef
+  ) => getProxy().addColumn({ serverId, database, schema, table, column }),
   getConstraints: (serverId: string, database: string, schema: string, table: string) =>
     getProxy().getConstraints({ serverId, database, schema, table }),
   getIndexes: (serverId: string, database: string, schema: string, table: string) =>
@@ -195,6 +243,10 @@ export const rpc = {
     getProxy().getRules({ serverId, database, schema, table }),
   getTriggers: (serverId: string, database: string, schema: string, table: string) =>
     getProxy().getTriggers({ serverId, database, schema, table }),
+  minimizeWindow: () => getProxy().minimizeWindow(),
+  maximizeWindow: () => getProxy().maximizeWindow(),
+  closeWindow: () => getProxy().closeWindow(),
+  getWindowState: () => getProxy().getWindowState(),
 };
 
 // ─── React Query key factory ──────────────────────────────────────────────────

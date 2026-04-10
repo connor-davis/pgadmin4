@@ -12,6 +12,13 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { type ColumnDef, queryKeys, rpc } from '@/lib/rpc';
 
 const PG_TYPES = [
@@ -167,19 +174,21 @@ export function CreateTableDialog({
                     }
                     className="h-7 text-xs"
                   />
-                  <select
-                    className="h-7 rounded-md border border-input bg-background px-2 text-xs"
+                  <Select
                     value={col.type}
-                    onChange={(e) =>
-                      updateColumn(col._id, { type: e.target.value })
-                    }
+                    onValueChange={(v) => v !== null && updateColumn(col._id, { type: v })}
                   >
-                    {PG_TYPES.map((t) => (
-                      <option key={t} value={t}>
-                        {t}
-                      </option>
-                    ))}
-                  </select>
+                    <SelectTrigger size="sm" className="h-7 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {PG_TYPES.map((t) => (
+                        <SelectItem key={t} value={t} className="text-xs">
+                          {t}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                   <input
                     type="checkbox"
                     title="NOT NULL"

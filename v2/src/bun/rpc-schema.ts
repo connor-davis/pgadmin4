@@ -154,8 +154,39 @@ export type PgAdminRPCSchema = {
         response: { success: boolean };
       };
       getTableData: {
-        params: { serverId: string; database: string; schema: string; table: string; limit?: number };
+        params: {
+          serverId: string;
+          database: string;
+          schema: string;
+          table: string;
+          limit?: number;
+          /** "first" (default) | "last" | "all" | "filtered" */
+          rowMode?: "first" | "last" | "all" | "filtered";
+          /** WHERE clause body used when rowMode === "filtered" */
+          filter?: string;
+        };
         response: QueryResult;
+      };
+      truncateTable: {
+        params: {
+          serverId: string;
+          database: string;
+          schema: string;
+          table: string;
+          /** "plain" | "cascade" | "restart" | "cascade_restart" */
+          mode: "plain" | "cascade" | "restart" | "cascade_restart";
+        };
+        response: { success: boolean };
+      };
+      addColumn: {
+        params: {
+          serverId: string;
+          database: string;
+          schema: string;
+          table: string;
+          column: ColumnDef;
+        };
+        response: ColumnInfo;
       };
       getConstraints: {
         params: { serverId: string; database: string; schema: string; table: string };
@@ -177,6 +208,10 @@ export type PgAdminRPCSchema = {
         params: { serverId: string; database: string; schema: string; table: string };
         response: TriggerInfo[];
       };
+      minimizeWindow: { params: undefined; response: void };
+      maximizeWindow: { params: undefined; response: void };
+      closeWindow: { params: undefined; response: void };
+      getWindowState: { params: undefined; response: { maximized: boolean } };
     };
     messages: {};
   };

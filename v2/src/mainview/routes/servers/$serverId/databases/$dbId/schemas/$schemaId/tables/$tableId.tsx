@@ -1,10 +1,28 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { ArrowLeft, Loader2, Trash2 } from 'lucide-react';
+import {
+  ArrowLeft,
+  ChevronDown,
+  Filter,
+  Loader2,
+  Plus,
+  Scissors,
+  Trash2,
+} from 'lucide-react';
 import { useState } from 'react';
 
+import { AddColumnDialog } from '@/components/pgadmin/dialogs/AddColumnDialog';
 import { ConfirmDropDialog } from '@/components/pgadmin/dialogs/ConfirmDropDialog';
+import { TruncateTableDialog } from '@/components/pgadmin/dialogs/TruncateTableDialog';
 import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Input } from '@/components/ui/input';
 import {
   Table,
   TableBody,
@@ -21,11 +39,36 @@ export const Route = createFileRoute(
   component: TableDetailPage,
 });
 
+type RowMode = 'first' | 'last' | 'all' | 'filtered';
+type TruncateMode = 'plain' | 'cascade' | 'restart' | 'cascade_restart';
+
+const ROW_MODE_LABELS: Record<RowMode, string> = {
+  first: 'First 100 Rows',
+  last: 'Last 100 Rows',
+  all: 'All Rows',
+  filtered: 'Filtered Rows',
+};
+
 function TableDetailPage() {
   const { serverId, dbId, schemaId, tableId } = Route.useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+
+  // Drop
   const [dropOpen, setDropOpen] = useState(false);
+  const [dropCascade, setDropCascade] = useState(false);
+
+  // Truncate
+  const [truncateOpen, setTruncateOpen] = useState(false);
+  const [truncateMode, setTruncateMode] = useState<TruncateMode>('plain');
+
+  // Add Column
+  const [addColumnOpen, setAddColumnOpen] = useState(false);
+
+  // View Data mode
+  const [rowMode, setRowMode] = useState<RowMode>('first');
+  const [filterText, setFilterText] = useState('');
+  const [appliedFilter, setAppliedFilter] = useState('');
 
   const { data: columns = [], isLoading: colsLoading } = useQuery({
     queryKey: queryKeys.columns(serverId, dbId, schemaId, tableId),
@@ -33,12 +76,25 @@ function TableDetailPage() {
   });
 
   const { data: tableData, isLoading: dataLoading } = useQuery({
-    queryKey: queryKeys.tableData(serverId, dbId, schemaId, tableId),
-    queryFn: () => rpc.getTableData(serverId, dbId, schemaId, tableId, 100),
+    queryKey: [
+      ...queryKeys.tableData(serverId, dbId, schemaId, tableId),
+      rowMode,
+      appliedFilter,
+    ],
+    queryFn: () =>
+      rpc.getTableData(
+        serverId,
+        dbId,
+        schemaId,
+        tableId,
+        100,
+        rowMode,
+        rowMode === 'filtered' ? appliedFilter : undefined
+      ),
   });
 
   async function handleDrop() {
-    await rpc.dropTable(serverId, dbId, schemaId, tableId, true);
+    await rpc.dropTable(serverId, dbId, schemaId, tableId, dropCascade);
     await queryClient.invalidateQueries({
       queryKey: queryKeys.tables(serverId, dbId, schemaId),
     });
@@ -46,6 +102,20 @@ function TableDetailPage() {
       to: '/servers/$serverId/databases/$dbId',
       params: { serverId, dbId },
     });
+  }
+
+  function openTruncate(mode: TruncateMode) {
+    setTruncateMode(mode);
+    setTruncateOpen(true);
+  }
+
+  function openDrop(cascade: boolean) {
+    setDropCascade(cascade);
+    setDropOpen(true);
+  }
+
+  function applyFilter() {
+    setAppliedFilter(filterText);
   }
 
   return (
@@ -71,21 +141,66 @@ function TableDetailPage() {
           </h1>
           <p className="text-xs text-muted-foreground">{dbId}</p>
         </div>
-        <Button
-          variant="destructive"
-          size="sm"
-          onClick={() => setDropOpen(true)}
-        >
-          <Trash2 className="h-3.5 w-3.5 mr-1" />
-          Drop Table
-        </Button>
+
+        {/* Truncate dropdown */}
+        <DropdownMenu>
+          <DropdownMenuTrigger className="inline-flex items-center gap-1.5 rounded-md border border-input bg-background px-3 py-1 text-sm font-medium shadow-xs hover:bg-accent hover:text-accent-foreground h-8">
+            <Scissors className="h-3.5 w-3.5" />
+            Truncate
+            <ChevronDown className="h-3 w-3" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={() => openTruncate('plain')}>
+              Truncate
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => openTruncate('cascade')}>
+              Truncate Cascade
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => openTruncate('restart')}>
+              Truncate Restart Identity
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        {/* Drop dropdown */}
+        <DropdownMenu>
+          <DropdownMenuTrigger className="inline-flex items-center gap-1.5 rounded-md bg-destructive px-3 py-1 text-sm font-medium text-destructive-foreground shadow-xs hover:bg-destructive/90 h-8">
+            <Trash2 className="h-3.5 w-3.5" />
+            Drop
+            <ChevronDown className="h-3 w-3" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem
+              className="text-destructive focus:text-destructive"
+              onClick={() => openDrop(false)}
+            >
+              Drop
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              className="text-destructive focus:text-destructive"
+              onClick={() => openDrop(true)}
+            >
+              Drop (Cascade)
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       <div className="flex flex-col flex-1 overflow-hidden divide-y divide-border">
         {/* Columns panel */}
         <div className="shrink-0 max-h-48 overflow-y-auto">
-          <div className="px-4 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground bg-muted/40">
-            Columns ({columns.length})
+          <div className="px-4 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground bg-muted/40 flex items-center justify-between">
+            <span>Columns ({columns.length})</span>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 px-2 text-xs"
+              onClick={() => setAddColumnOpen(true)}
+            >
+              <Plus className="h-3 w-3 mr-1" />
+              Add Column
+            </Button>
           </div>
           {colsLoading ? (
             <div className="flex justify-center py-4">
@@ -104,7 +219,9 @@ function TableDetailPage() {
                 {columns.map((col) => (
                   <TableRow key={col.name}>
                     <TableCell className="font-medium">{col.name}</TableCell>
-                    <TableCell className="text-muted-foreground">{col.type}</TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {col.type}
+                    </TableCell>
                     <TableCell>{col.nullable ? 'YES' : 'NO'}</TableCell>
                   </TableRow>
                 ))}
@@ -113,54 +230,119 @@ function TableDetailPage() {
           )}
         </div>
 
-        {/* Data preview */}
-        <div className="flex-1 overflow-auto">
-          <div className="px-4 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground bg-muted/40">
-            Data Preview{tableData ? ` (${tableData.rowCount} rows)` : ''}
+        {/* Data panel */}
+        <div className="flex-1 overflow-auto flex flex-col">
+          {/* View data toolbar */}
+          <div className="px-4 py-2 bg-muted/40 flex items-center gap-2 flex-wrap shrink-0">
+            <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mr-1">
+              View Data{tableData ? ` (${tableData.rowCount} rows)` : ''}
+            </span>
+            {(['first', 'last', 'all', 'filtered'] as RowMode[]).map((mode) => (
+              <button
+                key={mode}
+                onClick={() => setRowMode(mode)}
+                className={`text-xs px-2 py-0.5 rounded border transition-colors ${
+                  rowMode === mode
+                    ? 'bg-primary text-primary-foreground border-primary'
+                    : 'border-border bg-background hover:bg-accent'
+                }`}
+              >
+                {ROW_MODE_LABELS[mode]}
+              </button>
+            ))}
+            {rowMode === 'filtered' && (
+              <div className="flex items-center gap-1 mt-1 w-full">
+                <Filter className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                <Input
+                  className="h-7 text-xs flex-1"
+                  placeholder="WHERE clause, e.g. id > 100 AND status = 'active'"
+                  value={filterText}
+                  onChange={(e) => setFilterText(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && applyFilter()}
+                />
+                <Button
+                  size="sm"
+                  className="h-7 px-2 text-xs"
+                  onClick={applyFilter}
+                >
+                  Apply
+                </Button>
+              </div>
+            )}
           </div>
-          {dataLoading ? (
-            <div className="flex justify-center py-4">
-              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-            </div>
-          ) : tableData && tableData.columns.length > 0 ? (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  {tableData.columns.map((col) => (
-                    <TableHead key={col}>{col}</TableHead>
-                  ))}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {tableData.rows.map((row, i) => (
-                  <TableRow key={i}>
-                    {row.map((cell, j) => (
-                      <TableCell key={j} className="text-xs font-mono">
-                        {cell === null ? (
-                          <span className="text-muted-foreground italic">NULL</span>
-                        ) : (
-                          String(cell)
-                        )}
-                      </TableCell>
+
+          {/* Data table */}
+          <div className="flex-1 overflow-auto">
+            {dataLoading ? (
+              <div className="flex justify-center py-4">
+                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+              </div>
+            ) : tableData && tableData.columns.length > 0 ? (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    {tableData.columns.map((col) => (
+                      <TableHead key={col}>{col}</TableHead>
                     ))}
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          ) : (
-            <p className="px-4 py-4 text-sm text-muted-foreground">
-              No data in this table.
-            </p>
-          )}
+                </TableHeader>
+                <TableBody>
+                  {tableData.rows.map((row, i) => (
+                    <TableRow key={i}>
+                      {row.map((cell, j) => (
+                        <TableCell key={j} className="text-xs font-mono">
+                          {cell === null ? (
+                            <span className="text-muted-foreground italic">
+                              NULL
+                            </span>
+                          ) : (
+                            String(cell)
+                          )}
+                        </TableCell>
+                      ))}
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            ) : (
+              <p className="px-4 py-4 text-sm text-muted-foreground">
+                No data in this table.
+              </p>
+            )}
+          </div>
         </div>
       </div>
 
+      {/* Dialogs */}
       <ConfirmDropDialog
         open={dropOpen}
         onOpenChange={setDropOpen}
-        title="Drop Table"
-        description={`This will permanently drop table "${schemaId}.${tableId}" and all its data. This cannot be undone.`}
+        title={dropCascade ? 'Drop Table (Cascade)' : 'Drop Table'}
+        description={
+          dropCascade
+            ? `This will permanently drop "${schemaId}.${tableId}" and all dependent objects. This cannot be undone.`
+            : `This will permanently drop table "${schemaId}.${tableId}" and all its data. This cannot be undone.`
+        }
         onConfirm={handleDrop}
+      />
+
+      <TruncateTableDialog
+        open={truncateOpen}
+        onOpenChange={setTruncateOpen}
+        serverId={serverId}
+        database={dbId}
+        schema={schemaId}
+        table={tableId}
+        initialMode={truncateMode}
+      />
+
+      <AddColumnDialog
+        open={addColumnOpen}
+        onOpenChange={setAddColumnOpen}
+        serverId={serverId}
+        database={dbId}
+        schema={schemaId}
+        table={tableId}
       />
     </div>
   );

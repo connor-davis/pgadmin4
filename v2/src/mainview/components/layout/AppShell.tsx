@@ -11,10 +11,12 @@ import {
 import { useState } from 'react';
 
 import { AddServerDialog } from '@/components/pgadmin/dialogs/AddServerDialog';
-import { MenuBar } from '@/components/layout/MenuBar';
+import { PreferencesDialog } from '@/components/pgadmin/dialogs/PreferencesDialog';
+import { TitleBar } from '@/components/layout/TitleBar';
 import { Workspace } from '@/components/layout/Workspace';
 import { ObjectExplorer } from '@/components/pgadmin/ObjectExplorer';
 import { cn } from '@/lib/utils';
+import { PreferencesProvider } from '@/store/preferences';
 
 // ─── Left icon strip items ────────────────────────────────────────────────────
 
@@ -64,6 +66,7 @@ export function AppShell() {
   const [explorerWidth, setExplorerWidth] = useState(260);
   const [dragging, setDragging] = useState(false);
   const [addServerOpen, setAddServerOpen] = useState(false);
+  const [prefsOpen, setPrefsOpen] = useState(false);
 
   function onDragStart(e: React.MouseEvent) {
     e.preventDefault();
@@ -88,9 +91,13 @@ export function AppShell() {
   }
 
   return (
+    <PreferencesProvider>
     <div className="flex h-screen w-screen flex-col overflow-hidden bg-background">
-      {/* Menu bar */}
-      <MenuBar />
+      {/* Title bar (draggable, combined with menu bar) */}
+      <TitleBar
+        onOpenPreferences={() => setPrefsOpen(true)}
+        onAddServer={() => setAddServerOpen(true)}
+      />
 
       {/* Body */}
       <div className="flex flex-1 overflow-hidden">
@@ -164,6 +171,8 @@ export function AppShell() {
       </div>
 
       <AddServerDialog open={addServerOpen} onOpenChange={setAddServerOpen} />
+      <PreferencesDialog open={prefsOpen} onOpenChange={setPrefsOpen} />
     </div>
+    </PreferencesProvider>
   );
 }

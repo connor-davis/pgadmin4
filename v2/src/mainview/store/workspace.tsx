@@ -117,7 +117,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       type: 'OPEN_TAB',
       tab: {
         id,
-        data: { type: 'query-tool', serverId, database, title: database },
+        data: { type: 'query-tool', serverId, database, title: database || 'Query Tool' },
       },
     });
   }, []);

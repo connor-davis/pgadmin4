@@ -8,6 +8,7 @@
 //////////////////////////////////////////////////////////////
 
 import gettext from 'sources/gettext';
+
 import url_for from 'sources/url_for';
 import {getPanelTitle} from './sqleditor_title';
 import {getRandomInt} from 'sources/utils';

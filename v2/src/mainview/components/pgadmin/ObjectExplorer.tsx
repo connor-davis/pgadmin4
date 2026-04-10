@@ -21,6 +21,8 @@ import { ConfirmDropDialog } from '@/components/pgadmin/dialogs/ConfirmDropDialo
 import { CreateDatabaseDialog } from '@/components/pgadmin/dialogs/CreateDatabaseDialog';
 import { CreateSchemaDialog } from '@/components/pgadmin/dialogs/CreateSchemaDialog';
 import { CreateTableDialog } from '@/components/pgadmin/dialogs/CreateTableDialog';
+import { AddColumnDialog } from '@/components/pgadmin/dialogs/AddColumnDialog';
+import { TruncateTableDialog } from '@/components/pgadmin/dialogs/TruncateTableDialog';
 import {
   ContextMenu,
   ContextMenuContent,
@@ -127,6 +129,7 @@ function ServerNode({
 }) {
   const [open, setOpen] = useState(false);
   const [createDbOpen, setCreateDbOpen] = useState(false);
+  const [removeOpen, setRemoveOpen] = useState(false);
   const queryClient = useQueryClient();
 
   const { data: databases = [], isLoading } = useQuery({
@@ -137,6 +140,11 @@ function ServerNode({
 
   function handleClick() {
     setOpen((o) => !o);
+  }
+
+  async function handleRemove() {
+    await rpc.deleteServer(server.id);
+    await queryClient.invalidateQueries({ queryKey: queryKeys.servers() });
   }
 
   async function handleRefresh() {
@@ -173,6 +181,14 @@ function ServerNode({
             <RefreshCw className="h-3.5 w-3.5" />
             Refresh
           </ContextMenuItem>
+          <ContextMenuSeparator />
+          <ContextMenuItem
+            variant="destructive"
+            onClick={() => setRemoveOpen(true)}
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            Remove Server
+          </ContextMenuItem>
         </ContextMenuContent>
       </ContextMenu>
 
@@ -194,6 +210,14 @@ function ServerNode({
         open={createDbOpen}
         onOpenChange={setCreateDbOpen}
         serverId={server.id}
+      />
+      <ConfirmDropDialog
+        open={removeOpen}
+        onOpenChange={setRemoveOpen}
+        title="Remove Server"
+        description={`Remove "${server.name}" (${server.host}:${server.port}) from pgAdmin? The server itself will not be affected.`}
+        confirmLabel="Remove"
+        onConfirm={handleRemove}
       />
     </li>
   );
@@ -469,25 +493,44 @@ function TableNode({
   table: { name: string; type: string };
 }) {
   const [open, setOpen] = useState(false);
+  const [dropCascade, setDropCascade] = useState(false);
   const [dropOpen, setDropOpen] = useState(false);
+  const [truncateMode, setTruncateMode] = useState<'plain' | 'cascade' | 'restart' | 'cascade_restart'>('plain');
   const [truncateOpen, setTruncateOpen] = useState(false);
   const queryClient = useQueryClient();
-  const { openQueryTool, openViewData } = useWorkspace();
+  const { openQueryTool, openScript } = useWorkspace();
 
   async function handleDrop() {
-    await rpc.dropTable(serverId, database, schema, table.name, true);
+    await rpc.dropTable(serverId, database, schema, table.name, dropCascade);
     await queryClient.invalidateQueries({
       queryKey: queryKeys.tables(serverId, database, schema),
     });
   }
 
-  async function handleTruncate() {
-    await rpc.executeQuery(
-      serverId,
-      database,
-      `TRUNCATE TABLE "${schema}"."${table.name}"`
-    );
-    toast.success(`Truncated "${schema}"."${table.name}"`);
+  function openTruncate(mode: 'plain' | 'cascade' | 'restart' | 'cascade_restart') {
+    setTruncateMode(mode);
+    setTruncateOpen(true);
+  }
+
+  function openDrop(cascade: boolean) {
+    setDropCascade(cascade);
+    setDropOpen(true);
+  }
+
+  function viewData(mode: 'all' | 'first' | 'last' | 'filtered') {
+    const q = `"${schema}"."${table.name}"`;
+    let sql: string;
+    if (mode === 'all') {
+      sql = `SELECT *\nFROM ${q};`;
+    } else if (mode === 'last') {
+      sql = `SELECT *\nFROM (\n  SELECT * FROM ${q} ORDER BY ctid DESC LIMIT 100\n) subq\nORDER BY ctid;`;
+    } else if (mode === 'filtered') {
+      sql = `SELECT *\nFROM ${q}\nWHERE -- add your conditions here\n;`;
+    } else {
+      sql = `SELECT *\nFROM ${q}\nLIMIT 100;`;
+    }
+    const modeLabel = mode === 'all' ? 'All Rows' : mode === 'last' ? 'Last 100' : mode === 'filtered' ? 'Filtered' : 'First 100';
+    openScript(serverId, database, `${schema}.${table.name} — ${modeLabel}`, sql);
   }
 
   async function handleRefresh() {
@@ -564,25 +607,46 @@ function TableNode({
               />
             </ContextMenuSubContent>
           </ContextMenuSub>
-          {/* Truncate submenu (simple + cascade) */}
+          {/* Truncate submenu */}
           <ContextMenuSub>
             <ContextMenuSubTrigger>
               <Trash2 className="h-3.5 w-3.5" />
               Truncate
             </ContextMenuSubTrigger>
             <ContextMenuSubContent>
-              <ContextMenuItem onClick={() => setTruncateOpen(true)}>
+              <ContextMenuItem onClick={() => openTruncate('plain')}>
                 Truncate
+              </ContextMenuItem>
+              <ContextMenuItem onClick={() => openTruncate('cascade')}>
+                Truncate Cascade
+              </ContextMenuItem>
+              <ContextMenuItem onClick={() => openTruncate('restart')}>
+                Truncate Restart Identity
               </ContextMenuItem>
             </ContextMenuSubContent>
           </ContextMenuSub>
-          {/* View Data */}
-          <ContextMenuItem
-            onClick={() => openViewData(serverId, database, schema, table.name)}
-          >
-            <Terminal className="h-3.5 w-3.5" />
-            View/Edit Data
-          </ContextMenuItem>
+          {/* View/Edit Data submenu */}
+          <ContextMenuSub>
+            <ContextMenuSubTrigger>
+              <Terminal className="h-3.5 w-3.5" />
+              View/Edit Data
+            </ContextMenuSubTrigger>
+            <ContextMenuSubContent>
+              <ContextMenuItem onClick={() => viewData('all')}>
+                All Rows
+              </ContextMenuItem>
+              <ContextMenuItem onClick={() => viewData('first')}>
+                First 100 Rows
+              </ContextMenuItem>
+              <ContextMenuItem onClick={() => viewData('last')}>
+                Last 100 Rows
+              </ContextMenuItem>
+              <ContextMenuSeparator />
+              <ContextMenuItem onClick={() => viewData('filtered')}>
+                Filtered Rows...
+              </ContextMenuItem>
+            </ContextMenuSubContent>
+          </ContextMenuSub>
           <ContextMenuSeparator />
           <ContextMenuItem onClick={() => openQueryTool(serverId, database)}>
             <Terminal className="h-3.5 w-3.5" />
@@ -594,12 +658,20 @@ function TableNode({
             Refresh
           </ContextMenuItem>
           <ContextMenuSeparator />
+          {/* Drop */}
           <ContextMenuItem
             variant="destructive"
-            onClick={() => setDropOpen(true)}
+            onClick={() => openDrop(false)}
           >
             <Trash2 className="h-3.5 w-3.5" />
-            Drop Table
+            Drop
+          </ContextMenuItem>
+          <ContextMenuItem
+            variant="destructive"
+            onClick={() => openDrop(true)}
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            Drop (Cascade)
           </ContextMenuItem>
         </ContextMenuContent>
       </ContextMenu>
@@ -655,16 +727,22 @@ function TableNode({
       <ConfirmDropDialog
         open={dropOpen}
         onOpenChange={setDropOpen}
-        title="Drop Table"
-        description={`This will permanently drop table "${schema}.${table.name}". This cannot be undone.`}
+        title={dropCascade ? 'Drop Table (Cascade)' : 'Drop Table'}
+        description={
+          dropCascade
+            ? `This will permanently drop "${schema}.${table.name}" and all dependent objects. This cannot be undone.`
+            : `This will permanently drop table "${schema}.${table.name}". This cannot be undone.`
+        }
         onConfirm={handleDrop}
       />
-      <ConfirmDropDialog
+      <TruncateTableDialog
         open={truncateOpen}
         onOpenChange={setTruncateOpen}
-        title="Truncate Table"
-        description={`This will remove all rows from "${schema}.${table.name}". This cannot be undone.`}
-        onConfirm={handleTruncate}
+        serverId={serverId}
+        database={database}
+        schema={schema}
+        table={table.name}
+        initialMode={truncateMode}
       />
     </li>
   );
@@ -762,6 +840,7 @@ function ColumnsNode({
   depth: number;
 }) {
   const [open, setOpen] = useState(false);
+  const [addColumnOpen, setAddColumnOpen] = useState(false);
   const { data: columns = [], isLoading } = useQuery({
     queryKey: queryKeys.columns(serverId, database, schema, table),
     queryFn: () => rpc.getColumns(serverId, database, schema, table),
@@ -769,16 +848,33 @@ function ColumnsNode({
   });
   return (
     <li>
-      <NodeRow
-        depth={depth}
-        icon={
-          <span className="text-[9px] font-bold text-muted-foreground">C</span>
-        }
-        label="Columns"
-        meta={open && !isLoading ? String(columns.length) : undefined}
-        open={open}
-        onClick={() => setOpen((o) => !o)}
-      />
+      <ContextMenu>
+        <ContextMenuTrigger>
+          <NodeRow
+            depth={depth}
+            icon={
+              <span className="text-[9px] font-bold text-muted-foreground">C</span>
+            }
+            label="Columns"
+            meta={open && !isLoading ? String(columns.length) : undefined}
+            open={open}
+            onClick={() => setOpen((o) => !o)}
+          />
+        </ContextMenuTrigger>
+        <ContextMenuContent>
+          <ContextMenuSub>
+            <ContextMenuSubTrigger>
+              <Plus className="h-3.5 w-3.5" />
+              Create
+            </ContextMenuSubTrigger>
+            <ContextMenuSubContent>
+              <ContextMenuItem onClick={() => setAddColumnOpen(true)}>
+                Column...
+              </ContextMenuItem>
+            </ContextMenuSubContent>
+          </ContextMenuSub>
+        </ContextMenuContent>
+      </ContextMenu>
       {open && (
         <ul>
           {isLoading ? (
@@ -803,6 +899,14 @@ function ColumnsNode({
           )}
         </ul>
       )}
+      <AddColumnDialog
+        open={addColumnOpen}
+        onOpenChange={setAddColumnOpen}
+        serverId={serverId}
+        database={database}
+        schema={schema}
+        table={table}
+      />
     </li>
   );
 }

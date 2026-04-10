@@ -113,6 +113,10 @@ async function closeServerConnections(serverId: string) {
   }
 }
 
+// ─── Window (forward reference so RPC handlers can reach it) ─────────────────
+
+let mainWindow: BrowserWindow | null = null;
+
 // ─── RPC handlers ─────────────────────────────────────────────────────────────
 
 const rpc = BrowserView.defineRPC<PgAdminRPCSchema>({
@@ -379,10 +383,23 @@ const rpc = BrowserView.defineRPC<PgAdminRPCSchema>({
 
       getTableData: async (params): Promise<QueryResult> => {
         const conn = await getConnection(params!.serverId, params!.database);
-        const limit = params!.limit ?? 100;
-        const result = await conn.unsafe<Record<string, unknown>[]>(
-          `SELECT * FROM "${params!.schema}"."${params!.table}" LIMIT ${limit}`
-        );
+        const { schema, table, rowMode = 'first', limit = 100, filter } = params!;
+        const qualified = `"${schema}"."${table}"`;
+
+        let sql: string;
+        if (rowMode === 'all') {
+          sql = `SELECT * FROM ${qualified}`;
+        } else if (rowMode === 'last') {
+          sql = `SELECT * FROM (SELECT * FROM ${qualified} ORDER BY ctid DESC LIMIT ${limit}) _subq ORDER BY ctid`;
+        } else if (rowMode === 'filtered') {
+          const where = filter && filter.trim() ? ` WHERE ${filter}` : '';
+          sql = `SELECT * FROM ${qualified}${where}`;
+        } else {
+          // first (default)
+          sql = `SELECT * FROM ${qualified} LIMIT ${limit}`;
+        }
+
+        const result = await conn.unsafe<Record<string, unknown>[]>(sql);
         if (!Array.isArray(result) || result.length === 0) {
           return { columns: [], rows: [], rowCount: 0 };
         }
@@ -396,6 +413,39 @@ const rpc = BrowserView.defineRPC<PgAdminRPCSchema>({
           })
         );
         return { columns, rows, rowCount: rows.length };
+      },
+
+      truncateTable: async (params): Promise<{ success: boolean }> => {
+        const conn = await getConnection(params!.serverId, params!.database);
+        const { schema, table, mode } = params!;
+        const qualified = `"${schema}"."${table}"`;
+        let suffix = '';
+        if (mode === 'cascade') suffix = ' CASCADE';
+        else if (mode === 'restart') suffix = ' RESTART IDENTITY';
+        else if (mode === 'cascade_restart') suffix = ' RESTART IDENTITY CASCADE';
+        await conn.unsafe(`TRUNCATE TABLE ${qualified}${suffix}`);
+        return { success: true };
+      },
+
+      addColumn: async (params): Promise<ColumnInfo> => {
+        const conn = await getConnection(params!.serverId, params!.database);
+        const { schema, table, column } = params!;
+        let def = `"${column.name}" ${column.type}`;
+        if (!column.nullable) def += ' NOT NULL';
+        if (column.defaultValue) def += ` DEFAULT ${column.defaultValue}`;
+        await conn.unsafe(`ALTER TABLE "${schema}"."${table}" ADD COLUMN ${def}`);
+        // Re-query column info to return canonical data
+        const rows = await conn<{ name: string; type: string; is_nullable: string }[]>`
+          SELECT column_name AS name,
+                 data_type   AS type,
+                 is_nullable
+          FROM   information_schema.columns
+          WHERE  table_schema = ${schema}
+            AND  table_name   = ${table}
+            AND  column_name  = ${column.name}
+        `;
+        if (rows.length === 0) throw new Error(`Column "${column.name}" not found after creation`);
+        return { name: rows[0].name, type: rows[0].type, nullable: rows[0].is_nullable === 'YES' };
       },
 
       getConstraints: async (params): Promise<ConstraintInfo[]> => {
@@ -492,6 +542,26 @@ const rpc = BrowserView.defineRPC<PgAdminRPCSchema>({
         return rows;
       },
 
+      minimizeWindow: (): void => {
+        mainWindow?.minimize();
+      },
+
+      maximizeWindow: (): void => {
+        if (mainWindow?.isMaximized()) {
+          mainWindow.unmaximize();
+        } else {
+          mainWindow?.maximize();
+        }
+      },
+
+      closeWindow: (): void => {
+        mainWindow?.close();
+      },
+
+      getWindowState: (): { maximized: boolean } => ({
+        maximized: mainWindow?.isMaximized() ?? false,
+      }),
+
       getTriggers: async (params): Promise<TriggerInfo[]> => {
         const conn = await getConnection(params!.serverId, params!.database);
         const rows = await conn<{
@@ -532,10 +602,11 @@ const rpc = BrowserView.defineRPC<PgAdminRPCSchema>({
 
 // ─── Window ───────────────────────────────────────────────────────────────────
 
-const mainWindow = new BrowserWindow({
+mainWindow = new BrowserWindow({
   title: 'pgAdmin 4',
   url: 'views://mainview/index.html',
   frame: { width: 1280, height: 720, x: 100, y: 100 },
+  titleBarStyle: 'hidden',
   rpc,
 });
 

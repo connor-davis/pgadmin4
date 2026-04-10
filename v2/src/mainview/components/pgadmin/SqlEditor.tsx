@@ -2,6 +2,7 @@ import CodeMirror from '@uiw/react-codemirror';
 
 import { sql } from '@codemirror/lang-sql';
 import { oneDark } from '@codemirror/theme-one-dark';
+import { useTheme } from 'next-themes';
 
 interface SqlEditorProps {
   value: string;
@@ -16,13 +17,16 @@ export function SqlEditor({
   onExecute,
   className,
 }: SqlEditorProps) {
+  const { resolvedTheme } = useTheme();
+  const isDark = resolvedTheme === 'dark';
+
   return (
     <div className={className} style={{ height: '100%', overflow: 'hidden' }}>
       <CodeMirror
         value={value}
         height="100%"
         extensions={[sql()]}
-        theme={oneDark}
+        theme={isDark ? oneDark : 'light'}
         onChange={onChange}
         onKeyDown={(e) => {
           if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
