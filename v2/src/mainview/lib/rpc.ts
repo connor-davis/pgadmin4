@@ -41,6 +41,39 @@ export type ColumnInfo = {
   nullable: boolean;
 };
 
+export type ConstraintInfo = {
+  name: string;
+  type: string;
+  definition: string;
+};
+
+export type IndexInfo = {
+  name: string;
+  definition: string;
+  unique: boolean;
+  primary: boolean;
+};
+
+export type RLSPolicyInfo = {
+  name: string;
+  cmd: string;
+  roles: string[];
+  using: string | null;
+  withCheck: string | null;
+};
+
+export type RuleInfo = {
+  name: string;
+  definition: string;
+};
+
+export type TriggerInfo = {
+  name: string;
+  event: string;
+  timing: string;
+  enabled: boolean;
+};
+
 export type ColumnDef = {
   name: string;
   type: string;
@@ -104,6 +137,11 @@ function getProxy() {
     }) => Promise<TableInfo>;
     dropTable: (params: { serverId: string; database: string; schema: string; name: string; cascade?: boolean }) => Promise<{ success: boolean }>;
     getTableData: (params: { serverId: string; database: string; schema: string; table: string; limit?: number }) => Promise<QueryResult>;
+    getConstraints: (params: { serverId: string; database: string; schema: string; table: string }) => Promise<ConstraintInfo[]>;
+    getIndexes: (params: { serverId: string; database: string; schema: string; table: string }) => Promise<IndexInfo[]>;
+    getRLSPolicies: (params: { serverId: string; database: string; schema: string; table: string }) => Promise<RLSPolicyInfo[]>;
+    getRules: (params: { serverId: string; database: string; schema: string; table: string }) => Promise<RuleInfo[]>;
+    getTriggers: (params: { serverId: string; database: string; schema: string; table: string }) => Promise<TriggerInfo[]>;
   };
 }
 
@@ -147,6 +185,16 @@ export const rpc = {
     getProxy().dropTable({ serverId, database, schema, name, cascade }),
   getTableData: (serverId: string, database: string, schema: string, table: string, limit?: number) =>
     getProxy().getTableData({ serverId, database, schema, table, limit }),
+  getConstraints: (serverId: string, database: string, schema: string, table: string) =>
+    getProxy().getConstraints({ serverId, database, schema, table }),
+  getIndexes: (serverId: string, database: string, schema: string, table: string) =>
+    getProxy().getIndexes({ serverId, database, schema, table }),
+  getRLSPolicies: (serverId: string, database: string, schema: string, table: string) =>
+    getProxy().getRLSPolicies({ serverId, database, schema, table }),
+  getRules: (serverId: string, database: string, schema: string, table: string) =>
+    getProxy().getRules({ serverId, database, schema, table }),
+  getTriggers: (serverId: string, database: string, schema: string, table: string) =>
+    getProxy().getTriggers({ serverId, database, schema, table }),
 };
 
 // ─── React Query key factory ──────────────────────────────────────────────────
@@ -171,4 +219,14 @@ export const queryKeys = {
     schema: string,
     table: string
   ) => ['tableData', serverId, database, schema, table] as const,
+  constraints: (serverId: string, database: string, schema: string, table: string) =>
+    ['constraints', serverId, database, schema, table] as const,
+  indexes: (serverId: string, database: string, schema: string, table: string) =>
+    ['indexes', serverId, database, schema, table] as const,
+  rlsPolicies: (serverId: string, database: string, schema: string, table: string) =>
+    ['rlsPolicies', serverId, database, schema, table] as const,
+  rules: (serverId: string, database: string, schema: string, table: string) =>
+    ['rules', serverId, database, schema, table] as const,
+  triggers: (serverId: string, database: string, schema: string, table: string) =>
+    ['triggers', serverId, database, schema, table] as const,
 };

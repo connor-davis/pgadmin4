@@ -55,6 +55,40 @@ export type ConnectionStatus = {
   error?: string;
 };
 
+export type ConstraintInfo = {
+  name: string;
+  /** p=primary key, f=foreign key, u=unique, c=check, t=trigger, x=exclusion */
+  type: string;
+  definition: string;
+};
+
+export type IndexInfo = {
+  name: string;
+  definition: string;
+  unique: boolean;
+  primary: boolean;
+};
+
+export type RLSPolicyInfo = {
+  name: string;
+  cmd: string;
+  roles: string[];
+  using: string | null;
+  withCheck: string | null;
+};
+
+export type RuleInfo = {
+  name: string;
+  definition: string;
+};
+
+export type TriggerInfo = {
+  name: string;
+  event: string;
+  timing: string;
+  enabled: boolean;
+};
+
 /**
  * Electrobun RPC schema — bun side exposes all Postgres handlers;
  * the webview side has no incoming request handlers (it only calls bun).
@@ -122,6 +156,26 @@ export type PgAdminRPCSchema = {
       getTableData: {
         params: { serverId: string; database: string; schema: string; table: string; limit?: number };
         response: QueryResult;
+      };
+      getConstraints: {
+        params: { serverId: string; database: string; schema: string; table: string };
+        response: ConstraintInfo[];
+      };
+      getIndexes: {
+        params: { serverId: string; database: string; schema: string; table: string };
+        response: IndexInfo[];
+      };
+      getRLSPolicies: {
+        params: { serverId: string; database: string; schema: string; table: string };
+        response: RLSPolicyInfo[];
+      };
+      getRules: {
+        params: { serverId: string; database: string; schema: string; table: string };
+        response: RuleInfo[];
+      };
+      getTriggers: {
+        params: { serverId: string; database: string; schema: string; table: string };
+        response: TriggerInfo[];
       };
     };
     messages: {};

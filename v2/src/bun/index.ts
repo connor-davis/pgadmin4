@@ -9,12 +9,17 @@ import type {
   ColumnDef,
   ColumnInfo,
   ConnectionStatus,
+  ConstraintInfo,
   DbInfo,
+  IndexInfo,
   PgAdminRPCSchema,
   QueryResult,
+  RLSPolicyInfo,
+  RuleInfo,
   SchemaInfo,
   ServerConfig,
   TableInfo,
+  TriggerInfo,
 } from './rpc-schema';
 
 // ─── App data directory ───────────────────────────────────────────────────────
@@ -391,6 +396,135 @@ const rpc = BrowserView.defineRPC<PgAdminRPCSchema>({
           })
         );
         return { columns, rows, rowCount: rows.length };
+      },
+
+      getConstraints: async (params): Promise<ConstraintInfo[]> => {
+        const conn = await getConnection(params!.serverId, params!.database);
+        const rows = await conn<{ name: string; type: string; definition: string }[]>`
+          SELECT con.conname AS name,
+                 con.contype AS type,
+                 pg_catalog.pg_get_constraintdef(con.oid, true) AS definition
+          FROM   pg_catalog.pg_constraint con
+          JOIN   pg_catalog.pg_class cls ON cls.oid = con.conrelid
+          JOIN   pg_catalog.pg_namespace ns ON ns.oid = cls.relnamespace
+          WHERE  ns.nspname = ${params!.schema}
+            AND  cls.relname = ${params!.table}
+          ORDER  BY con.conname
+        `;
+        return rows;
+      },
+
+      getIndexes: async (params): Promise<IndexInfo[]> => {
+        const conn = await getConnection(params!.serverId, params!.database);
+        const rows = await conn<{ name: string; definition: string; unique: boolean; primary: boolean }[]>`
+          SELECT i.relname AS name,
+                 pg_catalog.pg_get_indexdef(ix.indexrelid, 0, true) AS definition,
+                 ix.indisunique AS unique,
+                 ix.indisprimary AS primary
+          FROM   pg_catalog.pg_index ix
+          JOIN   pg_catalog.pg_class i ON i.oid = ix.indexrelid
+          JOIN   pg_catalog.pg_class t ON t.oid = ix.indrelid
+          JOIN   pg_catalog.pg_namespace ns ON ns.oid = t.relnamespace
+          WHERE  ns.nspname = ${params!.schema}
+            AND  t.relname  = ${params!.table}
+          ORDER  BY i.relname
+        `;
+        return rows;
+      },
+
+      getRLSPolicies: async (params): Promise<RLSPolicyInfo[]> => {
+        const conn = await getConnection(params!.serverId, params!.database);
+        const rows = await conn<{
+          name: string;
+          cmd: string;
+          roles: string;
+          using: string | null;
+          with_check: string | null;
+        }[]>`
+          SELECT polname AS name,
+                 CASE polcmd
+                   WHEN 'r' THEN 'SELECT'
+                   WHEN 'a' THEN 'INSERT'
+                   WHEN 'w' THEN 'UPDATE'
+                   WHEN 'd' THEN 'DELETE'
+                   ELSE 'ALL'
+                 END AS cmd,
+                 array_to_string(
+                   ARRAY(SELECT pg_catalog.quote_ident(rolname)
+                         FROM   pg_catalog.pg_roles
+                         WHERE  oid = ANY(polroles)),
+                   ', '
+                 ) AS roles,
+                 pg_catalog.pg_get_expr(polqual, polrelid) AS using,
+                 pg_catalog.pg_get_expr(polwithcheck, polrelid) AS with_check
+          FROM   pg_catalog.pg_policy pol
+          JOIN   pg_catalog.pg_class cls ON cls.oid = pol.polrelid
+          JOIN   pg_catalog.pg_namespace ns ON ns.oid = cls.relnamespace
+          WHERE  ns.nspname = ${params!.schema}
+            AND  cls.relname = ${params!.table}
+          ORDER  BY polname
+        `;
+        return rows.map((r) => ({
+          name: r.name,
+          cmd: r.cmd,
+          roles: r.roles ? r.roles.split(', ').filter(Boolean) : [],
+          using: r.using,
+          withCheck: r.with_check,
+        }));
+      },
+
+      getRules: async (params): Promise<RuleInfo[]> => {
+        const conn = await getConnection(params!.serverId, params!.database);
+        const rows = await conn<{ name: string; definition: string }[]>`
+          SELECT rulename AS name,
+                 pg_catalog.pg_get_ruledef(oid, true) AS definition
+          FROM   pg_catalog.pg_rewrite
+          WHERE  ev_class = (
+            SELECT c.oid
+            FROM   pg_catalog.pg_class c
+            JOIN   pg_catalog.pg_namespace ns ON ns.oid = c.relnamespace
+            WHERE  ns.nspname = ${params!.schema}
+              AND  c.relname  = ${params!.table}
+          )
+            AND  rulename != '_RETURN'
+          ORDER  BY rulename
+        `;
+        return rows;
+      },
+
+      getTriggers: async (params): Promise<TriggerInfo[]> => {
+        const conn = await getConnection(params!.serverId, params!.database);
+        const rows = await conn<{
+          name: string;
+          event: string;
+          timing: string;
+          enabled: boolean;
+        }[]>`
+          SELECT t.tgname AS name,
+                 string_agg(
+                   CASE em.num
+                     WHEN 1 THEN 'INSERT'
+                     WHEN 2 THEN 'DELETE'
+                     WHEN 4 THEN 'UPDATE'
+                     WHEN 8 THEN 'TRUNCATE'
+                   END,
+                   ' OR '
+                   ORDER BY em.num
+                 ) AS event,
+                 CASE t.tgtype & 2 WHEN 2 THEN 'BEFORE' ELSE 'AFTER' END AS timing,
+                 t.tgenabled != 'D' AS enabled
+          FROM   pg_catalog.pg_trigger t
+          JOIN   pg_catalog.pg_class cls ON cls.oid = t.tgrelid
+          JOIN   pg_catalog.pg_namespace ns ON ns.oid = cls.relnamespace
+          JOIN   (VALUES (1),(2),(4),(8)) AS em(num)
+                   ON (t.tgtype & em.num) <> 0
+          WHERE  ns.nspname = ${params!.schema}
+            AND  cls.relname = ${params!.table}
+            AND  NOT t.tgisinternal
+          GROUP  BY t.tgname, t.tgtype, t.tgenabled
+          ORDER  BY t.tgname
+        `;
+        return rows;
       },
     },
   },
