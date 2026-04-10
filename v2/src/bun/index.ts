@@ -1,6 +1,6 @@
 import { SQL } from 'bun';
 import { Database } from 'bun:sqlite';
-import { BrowserView, BrowserWindow } from 'electrobun/bun';
+import { BrowserView, BrowserWindow, Screen } from 'electrobun/bun';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -105,6 +105,7 @@ type TruncateTableParams = ServerDatabaseSchemaTableParams & {
   mode?: 'normal' | 'cascade' | 'restart' | 'cascade_restart';
 };
 type AddColumnParams = ServerDatabaseSchemaTableParams & { column: ColumnDef };
+type WindowFrame = { x: number; y: number; width: number; height: number };
 
 function rowToConfig(row: ServerRow): ServerConfig {
   return { ...row, ssl: Boolean(row.ssl) };
@@ -162,6 +163,38 @@ async function closeServerConnections(serverId: string) {
 // ─── Window (forward reference so RPC handlers can reach it) ─────────────────
 
 let mainWindow: BrowserWindow | null = null;
+let restoredWindowFrame: WindowFrame | null = null;
+
+function getDisplayWorkArea(frame: WindowFrame): WindowFrame {
+  const displays = Screen.getAllDisplays();
+  const windowCenterX = frame.x + frame.width / 2;
+  const windowCenterY = frame.y + frame.height / 2;
+
+  const containingDisplay = displays.find((display) => {
+    const { bounds } = display;
+    return (
+      windowCenterX >= bounds.x &&
+      windowCenterX <= bounds.x + bounds.width &&
+      windowCenterY >= bounds.y &&
+      windowCenterY <= bounds.y + bounds.height
+    );
+  });
+
+  return (containingDisplay ?? Screen.getPrimaryDisplay()).workArea;
+}
+
+function framesMatch(a: WindowFrame, b: WindowFrame): boolean {
+  return (
+    a.x === b.x &&
+    a.y === b.y &&
+    a.width === b.width &&
+    a.height === b.height
+  );
+}
+
+function isWindowZoomed(frame: WindowFrame): boolean {
+  return framesMatch(frame, getDisplayWorkArea(frame));
+}
 
 // ─── RPC handlers ─────────────────────────────────────────────────────────────
 
@@ -702,9 +735,7 @@ const rpc = BrowserView.defineRPC<PgAdminRPCSchema>({
       getERDData: async (params: GetERDDataParams): Promise<ERDData> => {
         const conn = await getConnection(params!.serverId, params!.database);
         const tables = params!.schema
-          ? await conn<
-              { name: string; schema: string; type: string }[]
-            >`
+          ? await conn<{ name: string; schema: string; type: string }[]>`
               SELECT cls.relname AS name,
                      ns.nspname AS schema,
                      CASE cls.relkind
@@ -717,9 +748,7 @@ const rpc = BrowserView.defineRPC<PgAdminRPCSchema>({
                 AND  ns.nspname = ${params!.schema}
               ORDER  BY ns.nspname, cls.relname
             `
-          : await conn<
-              { name: string; schema: string; type: string }[]
-            >`
+          : await conn<{ name: string; schema: string; type: string }[]>`
               SELECT cls.relname AS name,
                      ns.nspname AS schema,
                      CASE cls.relkind
@@ -899,24 +928,61 @@ const rpc = BrowserView.defineRPC<PgAdminRPCSchema>({
           return;
         }
 
+        const currentFrame = mainWindow.getFrame();
+
         if (mainWindow.isFullScreen()) {
           mainWindow.setFullScreen(false);
         }
 
         if (mainWindow.isMaximized()) {
           mainWindow.unmaximize();
-        } else {
-          mainWindow.maximize();
+          if (restoredWindowFrame) {
+            mainWindow.setFrame(
+              restoredWindowFrame.x,
+              restoredWindowFrame.y,
+              restoredWindowFrame.width,
+              restoredWindowFrame.height
+            );
+          }
+          return;
         }
+
+        if (isWindowZoomed(currentFrame)) {
+          if (restoredWindowFrame) {
+            mainWindow.setFrame(
+              restoredWindowFrame.x,
+              restoredWindowFrame.y,
+              restoredWindowFrame.width,
+              restoredWindowFrame.height
+            );
+          }
+          return;
+        }
+
+        restoredWindowFrame = currentFrame;
+        const workArea = getDisplayWorkArea(currentFrame);
+        mainWindow.setFrame(
+          workArea.x,
+          workArea.y,
+          workArea.width,
+          workArea.height
+        );
       },
 
       closeWindow: (): void => {
         mainWindow?.close();
       },
 
-      getWindowState: (): { maximized: boolean } => ({
-        maximized: mainWindow?.isMaximized() ?? false,
-      }),
+      getWindowState: (): { maximized: boolean } => {
+        if (!mainWindow) {
+          return { maximized: false };
+        }
+
+        const frame = mainWindow.getFrame();
+        return {
+          maximized: mainWindow.isMaximized() || isWindowZoomed(frame),
+        };
+      },
 
       getTriggers: async (
         params: ServerDatabaseSchemaTableParams
